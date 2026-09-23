@@ -22,7 +22,6 @@
     name: document.getElementById('eq-name'),
     power: document.getElementById('eq-power'),
     qty: document.getElementById('eq-qty'),
-    poe: document.getElementById('eq-poe'),
     addBtn: document.getElementById('btn-add'),
     cancelEditBtn: document.getElementById('btn-cancel-edit'),
     catalogDl: document.getElementById('eq-catalog-dl'),
@@ -118,11 +117,11 @@
 
   function defaultEquipamentos(){
     return [
-      {name:'Servidor', power:400, qty:1, poe:false},
-      {name:'Switch PoE 24 portas', power:150, qty:1, poe:false},
-      {name:'Câmera IP', power:15, qty:4, poe:true},
-      {name:'Roteador', power:15, qty:1, poe:false},
-      {name:'Monitor', power:40, qty:1, poe:false}
+      {name:'Servidor', power:400, qty:1},
+      {name:'Switch PoE 24 portas', power:150, qty:1},
+      {name:'Roteador', power:15, qty:1},
+      {name:'Monitor', power:40, qty:1},
+      {name:'DVR/NVR', power:35, qty:1}
     ];
   }
 
@@ -248,7 +247,6 @@
     els.name.value = e.name;
     els.power.value = e.power;
     els.qty.value = e.qty;
-    els.poe.checked = !!e.poe;
     els.addBtn.textContent = 'Salvar alterações';
     els.cancelEditBtn.hidden = false;
     els.name.focus();
@@ -260,7 +258,6 @@
     els.name.value = '';
     els.power.value = '';
     els.qty.value = '1';
-    els.poe.checked = false;
     els.addBtn.textContent = 'Adicionar';
     els.cancelEditBtn.hidden = true;
     renderTable();
@@ -274,20 +271,20 @@
       els.name.focus();
       return;
     }
-    var poe = !!els.poe.checked;
     learnPower(name, power);
 
     if(editIndex >= 0 && equipamentos[editIndex]){
+      // preserva a marcação PoE do item original, se houver (não há mais controle manual pra isso)
+      var poe = !!equipamentos[editIndex].poe;
       equipamentos[editIndex] = {name: name, power: power, qty: qty, poe: poe};
       showToast('Equipamento atualizado');
       cancelEdit();
     } else {
-      equipamentos.push({name: name, power: power, qty: qty, poe: poe});
+      equipamentos.push({name: name, power: power, qty: qty});
       showToast('Adicionado: ' + name);
       els.name.value = '';
       els.power.value = '';
       els.qty.value = '1';
-      els.poe.checked = false;
       els.name.focus();
     }
     els.eqNote.hidden = true;
@@ -846,7 +843,6 @@
   var tourSteps = [
     {mode: null, sel: 'header.top', title: 'Bem-vindo!', text: 'Esta ferramenta calcula a autonomia de um nobreak a partir dos equipamentos do seu rack — ou, ao contrário, ajuda a escolher o nobreak certo para o tempo de backup que você precisa. Vamos ver como usar.'},
     {mode: null, sel: '#eq-name', title: 'Catálogo de equipamentos', text: 'Digite aqui para buscar entre centenas de equipamentos já cadastrados (nobreaks, switches, centrais, servidores...). Você também pode digitar um nome livre se o item não estiver na lista.'},
-    {mode: null, sel: '.poe-check-row', title: 'Equipamentos PoE', text: 'Uma câmera ou leitor alimentado por um switch PoE não deve contar separado — marque esta caixa e o item entra na lista só como referência, sem somar na carga total (quem soma é o switch).'},
     {mode: null, sel: '.eq-table', title: 'Editar e remover', text: 'Use o ✎ para editar um item já adicionado, ou o × para removê-lo. A busca acima da tabela ajuda quando a lista crescer.'},
     {mode: null, sel: '.mode-switch', title: 'Dois modos de cálculo', text: '"Já tenho um nobreak" calcula a autonomia de um nobreak que você já possui. "Quero dimensionar" faz o caminho inverso: você diz quanto tempo precisa e a ferramenta calcula o que comprar.'},
     {mode: 'a', sel: '#a-model', title: 'Modelo do nobreak', text: 'Escolha um modelo do catálogo (XNB, ATTIV, Gamer, etc.) para preencher VA, bateria e fator de potência automaticamente — ou configure manualmente.'},

@@ -71,11 +71,6 @@
         </div>
       </div>
 
-      <label class="poe-check-row" for="eq-poe">
-        <input type="checkbox" id="eq-poe" />
-        Equipamento PoE
-      </label>
-
       <div class="eq-search-row">
         <input id="eq-search" type="search" placeholder="Buscar na lista adicionada..." aria-label="Buscar equipamento na lista" />
       </div>
@@ -97,7 +92,6 @@
         <span class="label">Carga total do rack</span>
         <span class="value" id="total-load">0 W</span>
       </div>
-      <p class="hint">Equipamentos marcados <span class="poe-badge">PoE</span> não entram na soma — a potência deles já está dentro do consumo do switch PoE que os alimenta.</p>
     </div>
 
     <!-- Coluna direita: inputs + resultado, trocam conforme o modo -->
@@ -207,63 +201,68 @@
       <div id="panel-b" hidden>
         <div class="card" id="b-config-card">
           <h2><span class="dot"></span>Autonomia desejada</h2>
-          <div class="field-grid">
-            <div class="field">
-              <label class="field-label" for="b-min">Autonomia desejada (min)</label>
-              <input id="b-min" type="number" min="0" step="1" value="30" />
-            </div>
-            <div class="field">
-              <label class="field-label" for="b-margin">Margem de segurança (%)</label>
-              <input id="b-margin" type="number" min="0" max="200" step="5" value="20" />
-            </div>
-            <div class="field">
-              <label class="field-label" for="b-vdc">Tensão da bateria (V)</label>
-              <input id="b-vdc" type="number" min="1" step="1" value="12" />
-            </div>
-            <div class="field">
-              <label class="field-label" for="b-eff">Eficiência do inversor (%)</label>
-              <input id="b-eff" type="number" min="10" max="100" step="1" value="70" />
-            </div>
-            <div class="field">
-              <label class="field-label" for="b-pf">Fator de potência do nobreak</label>
-              <input id="b-pf" type="number" min="0.1" max="1" step="0.05" value="0.70" />
-            </div>
-            <div class="field">
-              <label class="field-label" for="b-batah">Ah por bateria (referência)</label>
-              <input id="b-batah" type="number" min="1" step="0.5" value="7" />
-            </div>
+          <div class="field">
+            <label class="field-label" for="b-min">Quanto tempo os equipamentos precisam continuar ligados se faltar energia? (min)</label>
+            <input id="b-min" type="number" min="0" step="1" value="30" />
           </div>
-          <p class="hint">A margem de segurança compensa perda de capacidade da bateria com o tempo e picos de carga (inrush).</p>
+          <p class="hint">Ex: 30 minutos, 60 (1 hora), 120 (2 horas)... Some os equipamentos ao lado e o sistema já sugere os melhores nobreaks.</p>
+
+          <details class="advanced-details">
+            <summary>Configurações avançadas (opcional)</summary>
+            <div class="field-grid">
+              <div class="field">
+                <label class="field-label" for="b-margin">Margem de segurança (%)</label>
+                <input id="b-margin" type="number" min="0" max="200" step="5" value="20" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="b-vdc">Tensão da bateria (V)</label>
+                <input id="b-vdc" type="number" min="1" step="1" value="12" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="b-eff">Eficiência do inversor (%)</label>
+                <input id="b-eff" type="number" min="10" max="100" step="1" value="70" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="b-pf">Fator de potência do nobreak</label>
+                <input id="b-pf" type="number" min="0.1" max="1" step="0.05" value="0.70" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="b-batah">Ah por bateria (referência)</label>
+                <input id="b-batah" type="number" min="1" step="0.5" value="7" />
+              </div>
+            </div>
+            <p class="hint">A margem de segurança compensa perda de capacidade da bateria com o tempo e picos de carga (inrush). Só mexa aqui se souber o que está fazendo — os valores padrão já cobrem a maioria dos casos.</p>
+          </details>
         </div>
 
         <div class="card" id="b-result-card">
-          <h2><span class="dot"></span>Nobreak necessário</h2>
-          <div class="result-hero">
-            <div class="eyebrow">Capacidade de bateria mínima</div>
-            <div class="big-num" id="b-big">— <small>Ah</small></div>
-            <div class="sub" id="b-sub">preencha os equipamentos e a autonomia desejada</div>
-          </div>
-          <div class="mini-stats">
-            <div class="mini-stat"><div class="l">Carga total</div><div class="v" id="b-stat-load">0 W</div></div>
-            <div class="mini-stat"><div class="l">Energia necessária</div><div class="v" id="b-stat-energy">0 Wh</div></div>
-            <div class="mini-stat"><div class="l">Potência mínima do nobreak</div><div class="v" id="b-stat-va">0 VA</div></div>
-            <div class="mini-stat"><div class="l">Baterias em paralelo (ref.)</div><div class="v" id="b-stat-nbat">0×</div></div>
-          </div>
-          <div class="suggestion-box" id="b-suggestion">
-            Preencha os campos para ver a recomendação.
-          </div>
+          <h2><span class="dot"></span>Nobreaks recomendados</h2>
+          <div class="sub" id="b-sub" style="margin-bottom:14px;">preencha os equipamentos e a autonomia desejada</div>
+
+          <div id="b-dist-result"><p class="hint">Adicione os equipamentos e informe a autonomia desejada para ver as sugestões.</p></div>
 
           <div class="dist-block">
-            <label class="field-label">Sugestões de distribuição</label>
-            <p class="hint" style="margin-top:0;">O sistema mostra até 3 opções, priorizando modelos Intelbras e sempre buscando o menor número de nobreaks possível.</p>
-            <div id="b-dist-result"></div>
-          </div>
-
-          <div class="dist-block">
-            <label class="field-label" for="b-manual-model">Ou escolha um nobreak específico</label>
+            <label class="field-label" for="b-manual-model">Ou escolha um nobreak específico para ver quantas unidades seriam necessárias</label>
             <select id="b-manual-model"></select>
             <div id="b-manual-result"></div>
           </div>
+
+          <details class="advanced-details">
+            <summary>Detalhes técnicos</summary>
+            <div class="result-hero">
+              <div class="eyebrow">Capacidade de bateria mínima (para um único nobreak)</div>
+              <div class="big-num" id="b-big">— <small>Ah</small></div>
+            </div>
+            <div class="mini-stats">
+              <div class="mini-stat"><div class="l">Carga total</div><div class="v" id="b-stat-load">0 W</div></div>
+              <div class="mini-stat"><div class="l">Energia necessária</div><div class="v" id="b-stat-energy">0 Wh</div></div>
+              <div class="mini-stat"><div class="l">Potência mínima do nobreak</div><div class="v" id="b-stat-va">0 VA</div></div>
+              <div class="mini-stat"><div class="l">Baterias em paralelo (ref.)</div><div class="v" id="b-stat-nbat">0×</div></div>
+            </div>
+            <div class="suggestion-box" id="b-suggestion">
+              Preencha os campos para ver a recomendação.
+            </div>
+          </details>
         </div>
       </div>
     </div>
