@@ -712,38 +712,55 @@
     if(m.img){
       var fallback = genericIcon(m).replace(/"/g, '&quot;');
       return '<img src="' + escapeHtml(m.img) + '" alt="Foto do ' + escapeHtml(m.modelo || 'nobreak') +
-        '" style="width:96px;height:96px;object-fit:contain;display:block;" ' +
-        'onerror="this.onerror=null;this.outerHTML=\'' + fallback + '\';">';
+        '" onerror="this.onerror=null;this.outerHTML=\'' + fallback + '\';">';
     }
     return genericIcon(m);
   }
 
   // ---------- relatório para impressão / PDF ----------
+  function loadClassName(pct){
+    if(pct >= 100) return 'danger';
+    if(pct >= 80) return 'warn';
+    return 'ok';
+  }
+
   function buildReportHTML(m, result, desiredMin, totalLoad){
     var now = new Date();
     var dateStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     var clientName = els.bClientName ? els.bClientName.value.trim() : '';
     var qtyText = result.bins.length === 1 ? '1 unidade' : result.bins.length + ' unidades';
+    var overallMinutes = (result.energyWh / (totalLoad || 1)) * 60;
 
     var equipRows = equipamentos.map(function(e){
       var total = e.poe ? 0 : e.power * e.qty;
-      return '<tr' + (e.poe ? ' style="color:#888;"' : '') + '>' +
-        '<td>' + escapeHtml(e.name) + (e.poe ? ' <span style="font-size:.7em;">(PoE — não soma)</span>' : '') + '</td>' +
-        '<td style="text-align:right;">' + fmt(e.power) + ' W</td>' +
-        '<td style="text-align:center;">' + e.qty + '</td>' +
-        '<td style="text-align:right;">' + fmt(total) + ' W</td>' +
+      return '<tr' + (e.poe ? ' class="rp-muted-row"' : '') + '>' +
+        '<td>' + escapeHtml(e.name) + (e.poe ? ' <span class="rp-tag-inline">PoE — não soma</span>' : '') + '</td>' +
+        '<td class="num">' + fmt(e.power) + ' W</td>' +
+        '<td class="num center">' + e.qty + '</td>' +
+        '<td class="num strong">' + fmt(total) + ' W</td>' +
         '</tr>';
     }).join('');
 
     var binsHtml = result.bins.map(function(bin, i){
       var minutes = (result.energyWh / bin.load) * 60;
-      var pct = Math.min(Math.round((bin.load / result.capacity) * 100), 999);
+      var pctRaw = Math.round((bin.load / result.capacity) * 100);
+      var pct = Math.min(pctRaw, 999);
+      var barPct = Math.min(pctRaw, 100);
+      var cls = loadClassName(pctRaw);
       var groups = groupBinItems(bin.items);
       var itemsList = groups.map(function(g){
-        return '<li>' + (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name) + ' <span style="color:#888;">(' + fmt(g.power) + ' W cada)</span></li>';
+        return '<li><span>' + (g.qty > 1 ? '<b>' + g.qty + '×</b> ' : '') + escapeHtml(g.name) + '</span>' +
+          '<span class="rp-item-power">' + fmt(g.power) + ' W cada</span></li>';
       }).join('');
       return '<div class="rp-bin">' +
-        '<div class="rp-bin-title">Nobreak ' + (i + 1) + ' de ' + result.bins.length + ' — ' + Math.min(pct, 100) + '% de carga · ~' + fmt(minutes, 0) + ' min de autonomia</div>' +
+        '<div class="rp-bin-head">' +
+          '<div class="rp-bin-badge">' + (i + 1) + '</div>' +
+          '<div class="rp-bin-headtext">' +
+            '<div class="rp-bin-title">Nobreak ' + (i + 1) + ' de ' + result.bins.length + '</div>' +
+            '<div class="rp-bin-sub">' + pct + '% de carga · ~' + fmt(minutes, 0) + ' min de autonomia</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="rp-meter"><div class="rp-meter-fill ' + cls + '" style="width:' + barPct + '%;"></div></div>' +
         '<ul class="rp-bin-list">' + itemsList + '</ul>' +
         '</div>';
     }).join('');
@@ -751,62 +768,135 @@
     var oversizedHtml = '';
     if(result.oversized.length){
       var overGroups = groupBinItems(result.oversized);
-      oversizedHtml = '<p class="rp-warning">Atenção: os itens a seguir são grandes demais para caber sozinhos em uma unidade deste modelo — ' +
-        overGroups.map(function(g){ return (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name); }).join(', ') +
-        '.</p>';
+      oversizedHtml = '<div class="rp-warning"><span class="rp-warning-icon">⚠️</span><div>' +
+        '<strong>Atenção:</strong> os itens a seguir são grandes demais para caber sozinhos em uma unidade deste modelo — ' +
+        overGroups.map(function(g){ return (g.qty > 1 ? '<b>' + g.qty + '×</b> ' : '') + escapeHtml(g.name); }).join(', ') +
+        '.</div></div>';
     }
 
     return '<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
       '<title>Relatório de nobreak' + (clientName ? ' — ' + escapeHtml(clientName) : '') + '</title>' +
+      '<link rel="preconnect" href="https://fonts.googleapis.com">' +
+      '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">' +
       '<style>' +
-      'body{font-family:Arial,Helvetica,sans-serif;color:#151a22;max-width:820px;margin:32px auto;padding:0 20px;}' +
-      'h1{font-size:1.5rem;margin-bottom:4px;}' +
-      '.rp-meta{color:#5b6472;font-size:.85rem;margin-bottom:24px;}' +
-      'h2{font-size:1.1rem;border-bottom:2px solid #1e6fd9;padding-bottom:6px;margin-top:32px;}' +
-      'table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.9rem;}' +
-      'th{text-align:left;border-bottom:2px solid #dbe1ea;padding:6px 8px;font-size:.78rem;text-transform:uppercase;letter-spacing:.4px;color:#5b6472;}' +
-      'td{padding:6px 8px;border-bottom:1px solid #eef2f9;}' +
-      '.rp-total{font-weight:bold;font-size:1.05rem;text-align:right;margin-top:10px;}' +
-      '.rp-nobreak-card{display:flex;gap:20px;align-items:center;background:#eef2f9;border-radius:12px;padding:18px 20px;margin-top:14px;}' +
-      '.rp-nobreak-card img{border-radius:8px;background:#fff;}' +
-      '.rp-nobreak-info h3{margin:0 0 4px;font-size:1.2rem;}' +
-      '.rp-nobreak-info .badge{display:inline-block;background:#e4edfc;color:#1e6fd9;font-size:.72rem;font-weight:bold;padding:2px 9px;border-radius:999px;margin-right:6px;}' +
-      '.rp-nobreak-info .specs{color:#5b6472;font-size:.88rem;margin-top:6px;}' +
-      '.rp-bin{border:1px solid #dbe1ea;border-radius:10px;padding:12px 16px;margin-top:12px;}' +
-      '.rp-bin-title{font-weight:bold;font-size:.9rem;margin-bottom:6px;}' +
-      '.rp-bin-list{margin:0;padding-left:20px;font-size:.88rem;}' +
-      '.rp-warning{background:#fbf0dd;color:#8a5b06;padding:10px 14px;border-radius:8px;font-size:.85rem;margin-top:14px;}' +
-      '.rp-footer{margin-top:40px;padding-top:14px;border-top:1px solid #dbe1ea;color:#5b6472;font-size:.78rem;}' +
-      '.rp-print-bar{position:sticky;top:0;background:#fff;padding:10px 0;margin-bottom:10px;border-bottom:1px solid #dbe1ea;}' +
-      '.rp-print-bar button{background:#1e6fd9;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-size:.9rem;font-weight:bold;cursor:pointer;}' +
-      '@media print{.rp-print-bar{display:none;}body{margin:0;}}' +
+      ':root{' +
+        '--navy:#0f1b2d;--navy2:#16273f;--blue:#1e6fd9;--blue-dark:#144f9e;' +
+        '--ink:#151a22;--muted:#5b6472;--line:#e3e8f0;--surface:#f6f8fc;--card:#ffffff;' +
+        '--ok:#1f9d55;--ok-bg:#e5f7ec;--warn:#b3790a;--warn-bg:#fbf0dd;--danger:#c23a3a;--danger-bg:#fdeaea;' +
+        '}' +
+      '*{box-sizing:border-box;}' +
+      'body{font-family:"Inter",Arial,Helvetica,sans-serif;color:var(--ink);background:var(--surface);margin:0;padding:0 0 40px;}' +
+      '.rp-print-bar{position:sticky;top:0;background:#fff;padding:12px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:flex-end;z-index:10;}' +
+      '.rp-print-bar button{background:var(--blue);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(30,111,217,.35);}' +
+      '.rp-print-bar button:hover{background:var(--blue-dark);}' +
+      '.rp-wrap{max-width:860px;margin:0 auto;padding:0 24px;}' +
+      '.rp-hero{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 55%,var(--blue-dark) 100%);color:#fff;padding:40px 32px;margin-bottom:28px;}' +
+      '.rp-hero-inner{max-width:812px;margin:0 auto;}' +
+      '.rp-eyebrow{font-family:"Manrope",sans-serif;text-transform:uppercase;letter-spacing:1.6px;font-size:.72rem;font-weight:800;color:#9fc4f5;margin:0 0 10px;}' +
+      '.rp-hero h1{font-family:"Manrope",sans-serif;font-size:1.8rem;font-weight:800;margin:0 0 6px;letter-spacing:-.3px;}' +
+      '.rp-hero-meta{color:#c3d4ec;font-size:.88rem;margin-bottom:22px;}' +
+      '.rp-hero-meta strong{color:#fff;}' +
+      '.rp-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}' +
+      '.rp-stat{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:14px 16px;}' +
+      '.rp-stat-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.6px;color:#a9c3e6;font-weight:600;margin-bottom:6px;}' +
+      '.rp-stat-value{font-family:"Manrope",sans-serif;font-size:1.35rem;font-weight:800;}' +
+      '.rp-section{margin-top:36px;}' +
+      '.rp-section h2{font-family:"Manrope",sans-serif;font-size:1.05rem;font-weight:800;color:var(--navy);margin:0 0 14px;display:flex;align-items:center;gap:9px;}' +
+      '.rp-section h2::before{content:"";width:5px;height:18px;background:var(--blue);border-radius:3px;display:inline-block;}' +
+      '.rp-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 1px 3px rgba(15,27,45,.05);}' +
+      'table{width:100%;border-collapse:collapse;font-size:.88rem;}' +
+      'th{text-align:left;padding:9px 10px;font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--line);}' +
+      'td{padding:10px;border-bottom:1px solid var(--line);}' +
+      'tr:last-child td{border-bottom:none;}' +
+      'td.num{text-align:right;font-variant-numeric:tabular-nums;}' +
+      'td.center{text-align:center;}' +
+      'td.strong{font-weight:700;color:var(--navy);}' +
+      '.rp-muted-row td{color:#9aa2b0;}' +
+      '.rp-tag-inline{font-size:.68rem;background:var(--surface);color:var(--muted);padding:2px 7px;border-radius:999px;margin-left:4px;}' +
+      '.rp-total-bar{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);}' +
+      '.rp-total-label{color:var(--muted);font-size:.85rem;font-weight:600;}' +
+      '.rp-total-value{font-family:"Manrope",sans-serif;font-weight:800;font-size:1.3rem;color:var(--navy);}' +
+      '.rp-nobreak-card{display:flex;gap:22px;align-items:center;flex-wrap:wrap;}' +
+      '.rp-nobreak-photo{width:110px;height:110px;flex:0 0 110px;background:var(--surface);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--line);padding:10px;}' +
+      '.rp-nobreak-photo img,.rp-nobreak-photo svg{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;}' +
+      '.rp-nobreak-info{flex:1;min-width:220px;}' +
+      '.rp-nobreak-info h3{margin:0 0 8px;font-family:"Manrope",sans-serif;font-size:1.3rem;font-weight:800;color:var(--navy);}' +
+      '.badge{display:inline-block;font-size:.72rem;font-weight:700;padding:3px 11px;border-radius:999px;margin-right:6px;margin-bottom:6px;}' +
+      '.badge-intelbras{background:var(--ok-bg);color:var(--ok);}' +
+      '.badge-qty{background:#e4edfc;color:var(--blue-dark);}' +
+      '.rp-spec-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px;}' +
+      '.rp-spec{background:var(--surface);border-radius:10px;padding:9px 12px;}' +
+      '.rp-spec-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;margin-bottom:3px;}' +
+      '.rp-spec-value{font-size:.92rem;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;}' +
+      '.rp-bin{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-top:14px;background:var(--card);}' +
+      '.rp-bin-head{display:flex;align-items:center;gap:12px;}' +
+      '.rp-bin-badge{width:32px;height:32px;border-radius:9px;background:var(--navy);color:#fff;font-family:"Manrope",sans-serif;font-weight:800;font-size:.95rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;}' +
+      '.rp-bin-title{font-weight:700;font-size:.95rem;color:var(--navy);}' +
+      '.rp-bin-sub{color:var(--muted);font-size:.82rem;margin-top:1px;}' +
+      '.rp-meter{height:7px;border-radius:99px;background:var(--line);margin:12px 0 4px;overflow:hidden;}' +
+      '.rp-meter-fill{height:100%;border-radius:99px;}' +
+      '.rp-meter-fill.ok{background:var(--ok);}' +
+      '.rp-meter-fill.warn{background:var(--warn);}' +
+      '.rp-meter-fill.danger{background:var(--danger);}' +
+      '.rp-bin-list{list-style:none;margin:10px 0 0;padding:0;font-size:.88rem;}' +
+      '.rp-bin-list li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);}' +
+      '.rp-bin-list li:first-child{border-top:none;}' +
+      '.rp-item-power{color:var(--muted);font-size:.82rem;white-space:nowrap;font-variant-numeric:tabular-nums;}' +
+      '.rp-warning{display:flex;gap:12px;align-items:flex-start;background:var(--warn-bg);color:#7a5206;padding:14px 16px;border-radius:10px;font-size:.86rem;margin-top:16px;}' +
+      '.rp-warning-icon{font-size:1.1rem;}' +
+      '.rp-footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:.76rem;line-height:1.5;}' +
+      '@media (max-width:640px){.rp-stat-row{grid-template-columns:1fr;}.rp-nobreak-card{flex-direction:column;align-items:flex-start;}}' +
+      '@media print{.rp-print-bar{display:none;}body{background:#fff;}.rp-hero{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.rp-bin{page-break-inside:avoid;}}' +
       '</style></head><body>' +
       '<div class="rp-print-bar"><button onclick="window.print()">🖨️ Imprimir / salvar como PDF</button></div>' +
-      '<h1>Proposta de dimensionamento de nobreak</h1>' +
-      '<div class="rp-meta">' + (clientName ? 'Cliente/projeto: <strong>' + escapeHtml(clientName) + '</strong> · ' : '') + 'Gerado em ' + dateStr + '</div>' +
 
-      '<h2>Equipamentos do rack</h2>' +
+      '<div class="rp-hero"><div class="rp-hero-inner">' +
+        '<p class="rp-eyebrow">Proposta técnica · Nobreak</p>' +
+        '<h1>Dimensionamento de autonomia' + (clientName ? ' — ' + escapeHtml(clientName) : '') + '</h1>' +
+        '<div class="rp-hero-meta">Gerado em <strong>' + dateStr + '</strong></div>' +
+        '<div class="rp-stat-row">' +
+          '<div class="rp-stat"><div class="rp-stat-label">Carga total</div><div class="rp-stat-value">' + fmt(totalLoad) + ' W</div></div>' +
+          '<div class="rp-stat"><div class="rp-stat-label">Autonomia desejada</div><div class="rp-stat-value">' + fmt(desiredMin) + ' min</div></div>' +
+          '<div class="rp-stat"><div class="rp-stat-label">Nobreaks recomendados</div><div class="rp-stat-value">' + qtyText + '</div></div>' +
+        '</div>' +
+      '</div></div>' +
+
+      '<div class="rp-wrap">' +
+
+      '<div class="rp-section"><h2>Equipamentos do rack</h2><div class="rp-card">' +
       '<table><thead><tr><th>Equipamento</th><th style="text-align:right;">Potência</th><th style="text-align:center;">Qtd.</th><th style="text-align:right;">Total</th></tr></thead>' +
       '<tbody>' + equipRows + '</tbody></table>' +
-      '<div class="rp-total">Carga total do rack: ' + fmt(totalLoad) + ' W</div>' +
+      '<div class="rp-total-bar"><span class="rp-total-label">Carga total do rack</span><span class="rp-total-value">' + fmt(totalLoad) + ' W</span></div>' +
+      '</div></div>' +
 
-      '<h2>Nobreak recomendado</h2>' +
+      '<div class="rp-section"><h2>Nobreak recomendado</h2><div class="rp-card">' +
       '<div class="rp-nobreak-card">' +
-        '<div>' + nobreakIcon(m) + '</div>' +
+        '<div class="rp-nobreak-photo">' + nobreakIcon(m) + '</div>' +
         '<div class="rp-nobreak-info">' +
           '<h3>' + escapeHtml(m.modelo) + '</h3>' +
-          (isIntelbras(m) ? '<span class="badge">Intelbras</span>' : '') +
-          '<span class="badge" style="background:#e5f7ec;color:#1f9d55;">' + qtyText + '</span>' +
-          '<div class="specs">Linha: ' + escapeHtml(m.linha || '—') + ' · ' + fmt(m.va) + ' VA / ' + fmt(m.w) + ' W · Bateria: ' + m.nbat + '× ' + m.vdc + 'V ' + m.ah + 'Ah</div>' +
-          '<div class="specs">Autonomia desejada: ' + fmt(desiredMin) + ' min</div>' +
+          '<div>' +
+            (isIntelbras(m) ? '<span class="badge badge-intelbras">✓ Intelbras</span>' : '') +
+            '<span class="badge badge-qty">' + qtyText + '</span>' +
+          '</div>' +
+          '<div class="rp-spec-grid">' +
+            '<div class="rp-spec"><div class="rp-spec-label">Linha</div><div class="rp-spec-value">' + escapeHtml(m.linha || '—') + '</div></div>' +
+            '<div class="rp-spec"><div class="rp-spec-label">Potência</div><div class="rp-spec-value">' + fmt(m.va) + ' VA / ' + fmt(m.w) + ' W</div></div>' +
+            '<div class="rp-spec"><div class="rp-spec-label">Bateria</div><div class="rp-spec-value">' + m.nbat + '× ' + m.vdc + 'V ' + m.ah + 'Ah</div></div>' +
+            '<div class="rp-spec"><div class="rp-spec-label">Autonomia estimada</div><div class="rp-spec-value">~' + fmt(overallMinutes, 0) + ' min</div></div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
+      '</div></div>' +
 
-      '<h2>Distribuição dos equipamentos entre as unidades</h2>' +
+      '<div class="rp-section"><h2>Distribuição dos equipamentos entre as unidades</h2>' +
       binsHtml +
       oversizedHtml +
+      '</div>' +
 
       '<div class="rp-footer">Relatório gerado automaticamente pela Calculadora de Autonomia de Nobreak. Fotos meramente ilustrativas, cortesia do site oficial da Intelbras — cores e acabamento podem variar.</div>' +
+      '</div>' +
       '</body></html>';
   }
 
