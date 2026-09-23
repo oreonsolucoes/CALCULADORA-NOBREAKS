@@ -2,6 +2,7 @@
   var LS_EQUIP = 'nobreak_calc_equip_v1';
   var LS_CUSTOM = 'nobreak_calc_custom_models_v1';
   var LS_TOUR_SEEN = 'nobreak_calc_tour_seen_v1';
+  var LS_LEARNED_POWER = 'nobreak_calc_learned_power_v1';
 
   // ---------- catálogo de nobreaks (dados em js/data-nobreaks.js) ----------
   var presetCatalog = (typeof NOBREAK_PRESET_CATALOG !== 'undefined' ? NOBREAK_PRESET_CATALOG.slice() : []);
@@ -12,6 +13,7 @@
   var mode = 'a';
   var editIndex = -1;
   var searchTerm = '';
+  var lastDistParams = null; // {load, desiredMin, margin, eff} — reaproveitado pelo seletor manual
 
   var els = {
     eqBody: document.getElementById('eq-body'),
@@ -81,6 +83,8 @@
     bStatNbat: document.getElementById('b-stat-nbat'),
     bSuggestion: document.getElementById('b-suggestion'),
     bDistResult: document.getElementById('b-dist-result'),
+    bManualModel: document.getElementById('b-manual-model'),
+    bManualResult: document.getElementById('b-manual-result'),
 
     // navegação e feedback
     quicknav: document.getElementById('quicknav'),
@@ -271,6 +275,7 @@
       return;
     }
     var poe = !!els.poe.checked;
+    learnPower(name, power);
 
     if(editIndex >= 0 && equipamentos[editIndex]){
       equipamentos[editIndex] = {name: name, power: power, qty: qty, poe: poe};
@@ -340,8 +345,39 @@
 
   // ---------- catálogo de equipamentos (aba GERAL) ----------
   var equipCatalog = (typeof EQUIP_CATALOG !== 'undefined') ? EQUIP_CATALOG : [];
-  var catalogByLabel = {};
-  equipCatalog.forEach(function(it){ catalogByLabel[it.l] = it; });
+  var catalogByLabelLower = {};
+  equipCatalog.forEach(function(it){
+    catalogByLabelLower[it.l.trim().toLowerCase()] = it;
+  });
+
+  // ---------- potências aprendidas (equipamentos digitados/corrigidos pelo usuário) ----------
+  function loadLearnedPower(){
+    try{
+      var raw = localStorage.getItem(LS_LEARNED_POWER);
+      return raw ? JSON.parse(raw) : {};
+    }catch(e){ return {}; }
+  }
+  function saveLearnedPower(){
+    try{ localStorage.setItem(LS_LEARNED_POWER, JSON.stringify(learnedPower)); }catch(e){}
+  }
+  var learnedPower = loadLearnedPower();
+  // Aplica potências aprendidas por cima do catálogo assim que a página carrega,
+  // assim uma correção feita antes já vale para a próxima vez que o item for usado.
+  Object.keys(learnedPower).forEach(function(key){
+    var hit = catalogByLabelLower[key];
+    if(hit) hit.w = learnedPower[key];
+  });
+
+  function learnPower(name, power){
+    var key = name.trim().toLowerCase();
+    if(!key || !isFinite(power) || power <= 0) return;
+    if(learnedPower[key] !== power){
+      learnedPower[key] = power;
+      saveLearnedPower();
+    }
+    var hit = catalogByLabelLower[key];
+    if(hit) hit.w = power;
+  }
 
   function renderCatalogDatalist(){
     if(!els.catalogDl) return;
@@ -357,9 +393,12 @@
   }
 
   els.name.addEventListener('input', function(){
-    var hit = catalogByLabel[els.name.value];
+    var key = els.name.value.trim().toLowerCase();
+    var hit = catalogByLabelLower[key];
     if(hit && hit.w){
       els.power.value = hit.w;
+    } else if(learnedPower[key]){
+      els.power.value = learnedPower[key];
     }
   });
 
@@ -454,6 +493,7 @@
     customCatalog.push(novo);
     saveCustomModels();
     renderModelSelect();
+    renderManualModelSelect();
     els.model.value = novo.id;
     applyModel(novo.id);
 
@@ -465,6 +505,10 @@
     els.customForm.hidden = true;
     showToast('Nobreak "' + name + '" salvo na lista');
   });
+
+  if(els.bManualModel){
+    els.bManualModel.addEventListener('change', updateManualDistribution);
+  }
 
   // ---------- troca de modo ----------
   function setMode(m){
@@ -566,7 +610,9 @@
       els.bBig.innerHTML = '— <small>Ah</small>';
       els.bSub.textContent = 'adicione equipamentos e defina a autonomia desejada';
       els.bSuggestion.textContent = 'Preencha os campos para ver a recomendação.';
-      els.bDistResult.innerHTML = '';
+      els.bDistResult.innerHTML = '<p class="hint">Adicione os equipamentos e informe a autonomia desejada para ver as sugestões.</p>';
+      els.bManualResult.innerHTML = '';
+      lastDistParams = null;
       return;
     }
 
@@ -577,7 +623,9 @@
       '(considerando FP ' + fmt(pf, 2) + ') e banco de baterias de <strong>' + fmt(ahNeeded, 1) + ' Ah</strong> a ' + fmt(vdc) + 'V — ' +
       'equivalente a cerca de <strong>' + nBatSuggested + ' bateria(s)</strong> de ' + fmt(refBatAh, 1) + ' Ah em paralelo.';
 
+    lastDistParams = {load: load, desiredMin: desiredMin, margin: margin, eff: eff};
     updateDistribution(load, desiredMin, margin, eff);
+    updateManualDistribution();
   }
 
   // ---------- distribuição de carga entre múltiplos nobreaks ----------
@@ -625,15 +673,20 @@
     return {capacity: cap.capacity, energyWh: cap.energyWh, bins: bins, oversized: oversized};
   }
 
-  // Escolhe automaticamente o modelo que exige o MENOR número de unidades
-  // (empate: menor capacidade desperdiçada; empate: menor VA, mais econômico).
-  function bestDistributionChoice(desiredMin, margin, eff){
+  // Todos os modelos do catálogo padrão (js/data-nobreaks.js) são linhas Intelbras
+  // (XNB, ATTIV, ATTIV SENO, Gamer, Rack/Torre, Online). Modelos personalizados só
+  // contam como Intelbras se o nome/linha disser isso explicitamente.
+  function isIntelbras(m){
+    if(m.source === 'preset') return true;
+    var text = ((m.linha || '') + ' ' + (m.modelo || '')).toUpperCase();
+    return text.indexOf('INTELBRAS') !== -1;
+  }
+
+  function rankDistCandidates(desiredMin, margin, eff){
     var candidates = fullCatalog().map(function(m){
       var result = packEquipment(m, eff, desiredMin, margin);
       return {m: m, result: result};
     }).filter(function(c){ return c.result.capacity > 0 && c.result.bins.length > 0; });
-
-    if(!candidates.length) return null;
 
     candidates.sort(function(a, b){
       // 1) menos itens que não couberam em nenhuma unidade
@@ -644,49 +697,124 @@
       if(a.result.bins.length !== b.result.bins.length){
         return a.result.bins.length - b.result.bins.length;
       }
-      // 3) menor capacidade ociosa somada (melhor aproveitamento)
+      // 3) entre opções equivalentes, prioriza modelos Intelbras
+      var intA = isIntelbras(a.m), intB = isIntelbras(b.m);
+      if(intA !== intB) return intA ? -1 : 1;
+      // 4) menor capacidade ociosa somada (melhor aproveitamento)
       var wasteA = a.result.bins.reduce(function(s, bin){ return s + (a.result.capacity - bin.load); }, 0);
       var wasteB = b.result.bins.reduce(function(s, bin){ return s + (b.result.capacity - bin.load); }, 0);
       if(wasteA !== wasteB) return wasteA - wasteB;
-      // 4) menor VA (mais econômico entre equivalentes)
+      // 5) menor VA (mais econômico entre equivalentes)
       return a.m.va - b.m.va;
     });
 
-    return candidates[0];
+    return candidates;
   }
 
-  function updateDistribution(load, desiredMin, margin, eff){
-    var choice = bestDistributionChoice(desiredMin, margin, eff);
-    if(!choice){
-      els.bDistResult.innerHTML = '<div class="dist-warning">Nenhum modelo do catálogo sustenta ' + fmt(desiredMin) + ' min com a margem definida.</div>';
-      return;
-    }
+  // Até 3 sugestões, priorizando Intelbras e o menor número de unidades.
+  function bestDistributionChoices(desiredMin, margin, eff, limit){
+    return rankDistCandidates(desiredMin, margin, eff).slice(0, limit || 3);
+  }
+
+  function loadPctClass(pct){
+    if(pct >= 100) return 'danger';
+    if(pct >= 80) return 'warn';
+    return 'ok';
+  }
+
+  function renderDistOption(choice, idx, desiredMin){
     var m = choice.m;
     var result = choice.result;
+    var badges = idx === 0 ? '<span class="dist-badge best">Mais indicado</span>' : '<span class="dist-badge">Opção ' + (idx + 1) + '</span>';
+    if(isIntelbras(m)) badges += '<span class="dist-badge intelbras">Intelbras</span>';
 
-    var html = '<div class="dist-summary">O sistema escolheu <strong>' + escapeHtml(m.modelo) + '</strong> — são necessárias <strong>' + result.bins.length + ' unidade(s)</strong> (até ' + fmt(result.capacity) + ' W cada) para manter ' + fmt(desiredMin) + ' min de autonomia, usando o menor número possível de nobreaks.</div>';
+    var qtyText = result.bins.length === 1 ? '1 unidade' : result.bins.length + ' unidades';
 
-    html += result.bins.map(function(bin, idx){
+    var html = '<div class="dist-option' + (idx === 0 ? ' is-best' : '') + '">' +
+      '<div class="dist-option-header">' +
+        '<span class="dist-option-title">' + escapeHtml(m.modelo) + '</span>' +
+        '<span class="dist-option-badges">' + badges + '</span>' +
+      '</div>' +
+      '<div class="dist-summary">Você vai precisar de <strong>' + qtyText + '</strong> deste modelo para manter os equipamentos ligados por ' + fmt(desiredMin) + ' min.</div>';
+
+    html += result.bins.map(function(bin, i){
       var minutes = (result.energyWh / bin.load) * 60;
+      var pct = Math.min(Math.round((bin.load / result.capacity) * 100), 999);
+      var cls = loadPctClass(pct);
       var groups = groupBinItems(bin.items);
       var itemsText = groups.map(function(g){
-        return (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name) + ' (' + fmt(g.power) + ' W)';
+        return (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name);
       }).join(', ');
       return '<div class="dist-bin">' +
-        '<div class="dist-bin-title"><span>Nobreak ' + (idx + 1) + ' — ' + escapeHtml(m.modelo) + '</span>' +
-        '<span class="cap">' + fmt(bin.load) + ' / ' + fmt(result.capacity) + ' W · ~' + fmt(minutes, 0) + ' min</span></div>' +
-        '<div class="dist-bin-items">' + itemsText + '</div>' +
+        '<div class="dist-bin-title"><span>Nobreak ' + (i + 1) + '</span>' +
+        '<span class="cap">' + Math.min(pct, 100) + '% de carga · ~' + fmt(minutes, 0) + ' min de autonomia</span></div>' +
+        '<div class="mini-load-bar"><div class="mini-load-fill ' + cls + '" style="width:' + Math.min(pct, 100) + '%"></div></div>' +
+        '<div class="dist-bin-items">Equipamentos: ' + itemsText + '</div>' +
         '</div>';
     }).join('');
 
     if(result.oversized.length){
       var overGroups = groupBinItems(result.oversized);
-      html += '<div class="dist-warning">Não coube sozinho em nenhuma unidade, mesmo no maior modelo do catálogo: ' +
-        overGroups.map(function(g){ return (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name) + ' (' + fmt(g.power) + ' W)'; }).join(', ') +
-        ' — considere um nobreak maior ou cadastre um modelo personalizado.</div>';
+      html += '<div class="dist-warning">Estes equipamentos são grandes demais para caber sozinhos em uma unidade deste modelo: ' +
+        overGroups.map(function(g){ return (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name); }).join(', ') +
+        '.</div>';
     }
 
-    els.bDistResult.innerHTML = html;
+    html += '</div>';
+    return html;
+  }
+
+  function updateDistribution(load, desiredMin, margin, eff){
+    var choices = bestDistributionChoices(desiredMin, margin, eff, 3);
+    if(!choices.length){
+      els.bDistResult.innerHTML = '<div class="dist-warning">Nenhum modelo do catálogo sustenta ' + fmt(desiredMin) + ' min com a margem definida.</div>';
+      return;
+    }
+    els.bDistResult.innerHTML = choices.map(function(choice, idx){
+      return renderDistOption(choice, idx, desiredMin);
+    }).join('');
+  }
+
+  // ---------- escolha manual de nobreak ----------
+  function renderManualModelSelect(){
+    if(!els.bManualModel) return;
+    var previous = els.bManualModel.value;
+    els.bManualModel.innerHTML = fullCatalog().map(function(m){
+      return '<option value="' + m.id + '">' + escapeHtml(m.modelo) + ' (' + fmt(m.va) + ' VA' + (isIntelbras(m) ? ', Intelbras' : '') + ')</option>';
+    }).join('');
+    if(previous && fullCatalog().some(function(m){ return m.id === previous; })){
+      els.bManualModel.value = previous;
+    }
+  }
+
+  function updateManualDistribution(){
+    if(!els.bManualModel || !els.bManualResult) return;
+    if(!lastDistParams){
+      els.bManualResult.innerHTML = '';
+      return;
+    }
+    var id = els.bManualModel.value;
+    var m = fullCatalog().filter(function(x){ return x.id === id; })[0];
+    if(!m){ els.bManualResult.innerHTML = ''; return; }
+
+    var result = packEquipment(m, lastDistParams.eff, lastDistParams.desiredMin, lastDistParams.margin);
+    if(result.capacity <= 0){
+      els.bManualResult.innerHTML = '<div class="dist-warning">Este modelo não sustenta ' + fmt(lastDistParams.desiredMin) + ' min com a margem definida.</div>';
+      return;
+    }
+
+    var qtyText = result.bins.length === 1 ? '1 unidade' : result.bins.length + ' unidades';
+    var avgPct = Math.round(result.bins.reduce(function(s, b){ return s + (b.load / result.capacity); }, 0) / result.bins.length * 100);
+    var html = '<div class="manual-result">Você vai precisar de <strong>' + qtyText + '</strong> de <strong>' + escapeHtml(m.modelo) + '</strong> para manter os equipamentos ligados por ' + fmt(lastDistParams.desiredMin) + ' min (~' + Math.min(avgPct, 100) + '% de carga média por unidade).</div>';
+
+    if(result.oversized.length){
+      var overGroups = groupBinItems(result.oversized);
+      html += '<div class="dist-warning">Estes equipamentos são grandes demais para caber sozinhos em uma unidade deste modelo: ' +
+        overGroups.map(function(g){ return (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name); }).join(', ') +
+        '.</div>';
+    }
+
+    els.bManualResult.innerHTML = html;
   }
 
   function recalc(){
@@ -724,7 +852,7 @@
     {mode: 'a', sel: '#a-model', title: 'Modelo do nobreak', text: 'Escolha um modelo do catálogo (XNB, ATTIV, Gamer, etc.) para preencher VA, bateria e fator de potência automaticamente — ou configure manualmente.'},
     {mode: 'a', sel: '#a-result-card', title: 'Autonomia estimada', text: 'Aqui aparece o tempo estimado de backup, o quanto da capacidade do nobreak está sendo usado e um alerta se a carga estiver perto do limite.'},
     {mode: 'b', sel: '#b-min', title: 'Quanto tempo você precisa?', text: 'Informe a autonomia desejada e uma margem de segurança — a ferramenta calcula a capacidade de bateria e a potência mínima necessárias.'},
-    {mode: 'b', sel: '.dist-block', title: 'Distribuir entre vários nobreaks', text: 'Em vez de um nobreak gigante, veja como dividir os equipamentos entre várias unidades de um modelo já usado — a ferramenta monta os grupos automaticamente.'},
+    {mode: 'b', sel: '#b-dist-result', title: 'Nobreaks recomendados', text: 'A ferramenta já sugere até 3 nobreaks prontos para usar, com quantas unidades você precisa e a porcentagem de carga de cada uma — sem precisar entender nada de VA, Ah ou fator de potência.'},
     {mode: null, sel: '#tour-btn', title: 'Pronto!', text: 'Você pode rever este tour a qualquer momento clicando aqui.'}
   ];
   var tourIndex = 0;
@@ -814,6 +942,7 @@
   });
 
   renderModelSelect();
+  renderManualModelSelect();
   renderCatalogDatalist();
   renderTable();
   recalc();

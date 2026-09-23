@@ -73,7 +73,7 @@
 
       <label class="poe-check-row" for="eq-poe">
         <input type="checkbox" id="eq-poe" />
-        Alimentado via PoE por um switch (não soma na tomada — só o switch conta)
+        Equipamento PoE
       </label>
 
       <div class="eq-search-row">
@@ -254,9 +254,15 @@
           </div>
 
           <div class="dist-block">
-            <label class="field-label">Distribuição sugerida entre nobreaks</label>
-            <p class="hint" style="margin-top:0;">O sistema escolhe automaticamente o modelo que exige o menor número de unidades — sempre preferindo menos nobreaks a mais.</p>
+            <label class="field-label">Sugestões de distribuição</label>
+            <p class="hint" style="margin-top:0;">O sistema mostra até 3 opções, priorizando modelos Intelbras e sempre buscando o menor número de nobreaks possível.</p>
             <div id="b-dist-result"></div>
+          </div>
+
+          <div class="dist-block">
+            <label class="field-label" for="b-manual-model">Ou escolha um nobreak específico</label>
+            <select id="b-manual-model"></select>
+            <div id="b-manual-result"></div>
           </div>
         </div>
       </div>
