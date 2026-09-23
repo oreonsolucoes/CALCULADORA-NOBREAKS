@@ -62,10 +62,6 @@
     customCancel: document.getElementById('btn-custom-cancel'),
     cName: document.getElementById('c-name'),
     cVa: document.getElementById('c-va'),
-    cW: document.getElementById('c-w'),
-    cVdc: document.getElementById('c-vdc'),
-    cAh: document.getElementById('c-ah'),
-    cNbat: document.getElementById('c-nbat'),
 
     // modo B
     bMin: document.getElementById('b-min'),
@@ -85,6 +81,14 @@
     bManualModel: document.getElementById('b-manual-model'),
     bManualResult: document.getElementById('b-manual-result'),
     bClientName: document.getElementById('b-client-name'),
+
+    // cadastro simplificado de nobreak (modo B — nome + VA)
+    bcToggle: document.getElementById('btn-bc-toggle'),
+    bcForm: document.getElementById('bc-form'),
+    bcSave: document.getElementById('btn-bc-save'),
+    bcCancel: document.getElementById('btn-bc-cancel'),
+    bcName: document.getElementById('bc-name'),
+    bcVa: document.getElementById('bc-va'),
 
     // navegação e feedback
     quicknav: document.getElementById('quicknav'),
@@ -469,23 +473,18 @@
   els.customSave.addEventListener('click', function(){
     var name = els.cName.value.trim();
     var va = parseFloat(els.cVa.value);
-    var w = parseFloat(els.cW.value);
-    var vdc = parseFloat(els.cVdc.value);
-    var ah = parseFloat(els.cAh.value);
-    var nbat = parseInt(els.cNbat.value, 10);
 
-    if(!name || !isFinite(va) || va <= 0 || !isFinite(w) || w <= 0 || !isFinite(vdc) || vdc <= 0 || !isFinite(ah) || ah <= 0 || !isFinite(nbat) || nbat <= 0){
-      els.cName.focus();
-      return;
-    }
+    if(!name){ els.cName.focus(); return; }
+    if(!isFinite(va) || va <= 0){ els.cVa.focus(); return; }
 
+    var specs = estimateNobreakSpecs(va);
     var novo = {
       id: 'custom-' + Date.now(),
       linha: 'Personalizado',
       modelo: name,
       onda: 'Não especificado',
-      va: va, w: w, vdc: vdc, ah: ah, nbat: nbat,
-      aplicacao: 'Modelo personalizado adicionado por você',
+      va: va, w: specs.w, vdc: specs.vdc, ah: specs.ah, nbat: specs.nbat,
+      aplicacao: 'Modelo personalizado — potência e bateria estimadas automaticamente a partir do VA informado',
       source: 'custom'
     };
     customCatalog.push(novo);
@@ -497,15 +496,67 @@
 
     els.cName.value = '';
     els.cVa.value = '';
-    els.cW.value = '';
-    els.cAh.value = '';
-    els.cNbat.value = '1';
     els.customForm.hidden = true;
-    showToast('Nobreak "' + name + '" salvo na lista');
+    showToast('Nobreak "' + name + '" salvo — ' + fmt(specs.w) + ' W estimados');
   });
 
   if(els.bManualModel){
     els.bManualModel.addEventListener('change', updateManualDistribution);
+  }
+
+  // ---------- cadastro simplificado de nobreak no Modo B (só nome + VA) ----------
+  // Para quem não usa as linhas já cadastradas (XNB, ATTIV, Gamer, Rack/Torre, Online):
+  // a potência real (W) e a bateria são estimadas a partir do VA, usando a mesma
+  // faixa típica dos nobreaks interativos/semissenoidais mais comuns do mercado.
+  function estimateNobreakSpecs(va){
+    var w = Math.round(va * 0.6 / 10) * 10; // fator de potência típico ~0.6 (interativo/semissenoidal)
+    var vdc = 12;
+    var nbat = va <= 900 ? 1 : (va <= 2200 ? 2 : Math.max(2, Math.ceil(va / 1500)));
+    var ah = va <= 900 ? 7 : 9;
+    return {w: w, vdc: vdc, ah: ah, nbat: nbat};
+  }
+
+  if(els.bcToggle){
+    els.bcToggle.addEventListener('click', function(){
+      els.bcForm.hidden = !els.bcForm.hidden;
+      if(!els.bcForm.hidden) els.bcName.focus();
+    });
+  }
+  if(els.bcCancel){
+    els.bcCancel.addEventListener('click', function(){
+      els.bcForm.hidden = true;
+    });
+  }
+  if(els.bcSave){
+    els.bcSave.addEventListener('click', function(){
+      var name = els.bcName.value.trim();
+      var va = parseFloat(els.bcVa.value);
+
+      if(!name){ els.bcName.focus(); return; }
+      if(!isFinite(va) || va <= 0){ els.bcVa.focus(); return; }
+
+      var specs = estimateNobreakSpecs(va);
+      var novo = {
+        id: 'custom-' + Date.now(),
+        linha: 'Personalizado',
+        modelo: name,
+        onda: 'Não especificado',
+        va: va, w: specs.w, vdc: specs.vdc, ah: specs.ah, nbat: specs.nbat,
+        aplicacao: 'Modelo personalizado — potência e bateria estimadas automaticamente a partir do VA informado',
+        source: 'custom'
+      };
+      customCatalog.push(novo);
+      saveCustomModels();
+      renderModelSelect();
+      renderManualModelSelect();
+      els.bManualModel.value = novo.id;
+      updateManualDistribution();
+
+      els.bcName.value = '';
+      els.bcVa.value = '';
+      els.bcForm.hidden = true;
+      showToast('Nobreak "' + name + '" salvo — ' + fmt(specs.w) + ' W estimados');
+    });
   }
 
   // ---------- troca de modo ----------
@@ -1109,11 +1160,11 @@
     {mode: null, sel: 'header.top', title: 'Bem-vindo!', text: 'Esta ferramenta calcula a autonomia de um nobreak a partir dos equipamentos do seu rack — ou, ao contrário, ajuda a escolher o nobreak certo para o tempo de backup que você precisa. Vamos ver como usar.'},
     {mode: null, sel: '#eq-name', title: 'Catálogo de equipamentos', text: 'Digite aqui para buscar entre centenas de equipamentos já cadastrados (nobreaks, switches, centrais, servidores...). Você também pode digitar um nome livre se o item não estiver na lista.'},
     {mode: null, sel: '.eq-table', title: 'Editar e remover', text: 'Use o ✎ para editar um item já adicionado, ou o × para removê-lo. A busca acima da tabela ajuda quando a lista crescer.'},
-    {mode: null, sel: '.mode-switch', title: 'Dois modos de cálculo', text: '"Já tenho um nobreak" calcula a autonomia de um nobreak que você já possui. "Quero dimensionar" faz o caminho inverso: você diz quanto tempo precisa e a ferramenta calcula o que comprar.'},
-    {mode: 'a', sel: '#a-model', title: 'Modelo do nobreak', text: 'Escolha um modelo do catálogo (XNB, ATTIV, Gamer, etc.) para preencher VA, bateria e fator de potência automaticamente — ou configure manualmente.'},
-    {mode: 'a', sel: '#a-result-card', title: 'Autonomia estimada', text: 'Aqui aparece o tempo estimado de backup, o quanto da capacidade do nobreak está sendo usado e um alerta se a carga estiver perto do limite.'},
-    {mode: 'b', sel: '#b-min', title: 'Quanto tempo você precisa?', text: 'Informe a autonomia desejada e uma margem de segurança — a ferramenta calcula a capacidade de bateria e a potência mínima necessárias.'},
-    {mode: 'b', sel: '#b-dist-result', title: 'Nobreaks recomendados', text: 'A ferramenta já sugere até 3 nobreaks prontos para usar, com quantas unidades você precisa e a porcentagem de carga de cada uma — sem precisar entender nada de VA, Ah ou fator de potência.'},
+    {mode: null, sel: '.mode-switch', title: 'Duas abas, dois modos de cálculo', text: 'Vamos ver as duas: "Já tenho um nobreak" calcula a autonomia de um nobreak que você já possui. "Quero dimensionar" faz o caminho inverso — você diz quanto tempo precisa e a ferramenta calcula o que comprar.'},
+    {mode: 'a', sel: '#a-model', title: 'Aba 1 · Modelo do nobreak', text: 'Escolha um modelo do catálogo (XNB, ATTIV, Gamer, etc.) para preencher VA, bateria e fator de potência automaticamente — ou configure manualmente.'},
+    {mode: 'a', sel: '#a-result-card', title: 'Aba 1 · Autonomia estimada', text: 'Aqui aparece o tempo estimado de backup, o quanto da capacidade do nobreak está sendo usado e um alerta se a carga estiver perto do limite.'},
+    {mode: 'b', sel: '#b-min', title: 'Aba 2 · Quanto tempo você precisa?', text: 'Agora estamos na segunda aba, "Quero dimensionar". Informe a autonomia desejada e uma margem de segurança — a ferramenta calcula a capacidade de bateria e a potência mínima necessárias.'},
+    {mode: 'b', sel: '#b-dist-result', title: 'Aba 2 · Nobreaks recomendados', text: 'A ferramenta já sugere até 3 nobreaks prontos para usar, com quantas unidades você precisa e a porcentagem de carga de cada uma — sem precisar entender nada de VA, Ah ou fator de potência.'},
     {mode: null, sel: '#tour-btn', title: 'Pronto!', text: 'Você pode rever este tour a qualquer momento clicando aqui.'}
   ];
   var tourIndex = 0;

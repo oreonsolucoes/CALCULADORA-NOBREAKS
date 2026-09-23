@@ -137,7 +137,7 @@
           <button class="btn-ghost" id="btn-custom-toggle" type="button">+ Adicionar nobreak personalizado à lista</button>
 
           <div class="custom-form" id="custom-form" hidden>
-            <div class="custom-form-title">Novo nobreak personalizado</div>
+            <div class="custom-form-title">Novo nobreak (linha não listada)</div>
             <div class="field-grid">
               <div class="field full">
                 <label class="field-label" for="c-name">Nome / modelo</label>
@@ -147,23 +147,8 @@
                 <label class="field-label" for="c-va">Potência (VA)</label>
                 <input id="c-va" type="number" min="0" step="10" placeholder="2200" />
               </div>
-              <div class="field">
-                <label class="field-label" for="c-w">Potência real (W)</label>
-                <input id="c-w" type="number" min="0" step="10" placeholder="1100" />
-              </div>
-              <div class="field">
-                <label class="field-label" for="c-vdc">Tensão da bateria (V)</label>
-                <input id="c-vdc" type="number" min="1" step="1" value="12" />
-              </div>
-              <div class="field">
-                <label class="field-label" for="c-ah">Bateria (Ah)</label>
-                <input id="c-ah" type="number" min="0" step="0.5" placeholder="9" />
-              </div>
-              <div class="field">
-                <label class="field-label" for="c-nbat">Nº de baterias</label>
-                <input id="c-nbat" type="number" min="1" step="1" value="1" />
-              </div>
             </div>
+            <p class="hint">É só isso — a potência real (W), tensão e bateria são estimadas automaticamente a partir do VA informado. Se quiser, ajuste os campos acima (VA/PF/bateria) depois de selecionar o modelo.</p>
             <div class="custom-form-actions">
               <button class="btn-save" id="btn-custom-save" type="button">Salvar na lista</button>
               <button class="btn-cancel" id="btn-custom-cancel" type="button">Cancelar</button>
@@ -250,6 +235,27 @@
             <label class="field-label" for="b-manual-model">Ou escolha um nobreak específico para ver quantas unidades seriam necessárias</label>
             <select id="b-manual-model"></select>
             <div id="b-manual-result"></div>
+
+            <button class="btn-ghost" id="btn-bc-toggle" type="button">+ Cadastrar nobreak de outra linha</button>
+
+            <div class="custom-form" id="bc-form" hidden>
+              <div class="custom-form-title">Novo nobreak (linha não listada)</div>
+              <div class="field-grid">
+                <div class="field full">
+                  <label class="field-label" for="bc-name">Nome do modelo</label>
+                  <input id="bc-name" type="text" placeholder="Ex: Nobreak XPTO 2200" />
+                </div>
+                <div class="field">
+                  <label class="field-label" for="bc-va">Potência (VA)</label>
+                  <input id="bc-va" type="number" min="0" step="10" placeholder="2200" />
+                </div>
+              </div>
+              <p class="hint">É só isso — a potência real (W) e a bateria são estimadas automaticamente a partir do VA informado.</p>
+              <div class="custom-form-actions">
+                <button class="btn-save" id="btn-bc-save" type="button">Salvar e usar</button>
+                <button class="btn-cancel" id="btn-bc-cancel" type="button">Cancelar</button>
+              </div>
+            </div>
           </div>
 
           <details class="advanced-details">
