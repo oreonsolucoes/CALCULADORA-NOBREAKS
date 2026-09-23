@@ -16,7 +16,6 @@ where git >nul 2>nul
 if errorlevel 1 (
     echo [ERRO] Git nao encontrado. Instale em https://git-scm.com/download/win
     echo e execute este arquivo novamente.
-    pause
     exit /b 1
 )
 
@@ -124,4 +123,5 @@ echo.
 
 :fim
 echo ============================================================
-pause
+timeout /t 5 >nul
+exit /b 0
