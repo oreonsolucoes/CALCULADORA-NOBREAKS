@@ -84,6 +84,7 @@
     bDistResult: document.getElementById('b-dist-result'),
     bManualModel: document.getElementById('b-manual-model'),
     bManualResult: document.getElementById('b-manual-result'),
+    bClientName: document.getElementById('b-client-name'),
 
     // navegação e feedback
     quicknav: document.getElementById('quicknav'),
@@ -679,6 +680,147 @@
     return text.indexOf('INTELBRAS') !== -1;
   }
 
+  // ---------- ícones genéricos de nobreak (ilustrativos, não são fotos de produto) ----------
+  var ICON_TOWER =
+    '<svg viewBox="0 0 64 64" width="72" height="72" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect x="14" y="4" width="36" height="56" rx="5" fill="#eef2f9" stroke="#5b6472" stroke-width="2"/>' +
+    '<rect x="20" y="10" width="24" height="13" rx="2" fill="#1e6fd9"/>' +
+    '<circle cx="24" cy="34" r="2.2" fill="#1f9d55"/>' +
+    '<circle cx="32" cy="34" r="2.2" fill="#5b6472"/>' +
+    '<circle cx="40" cy="34" r="2.2" fill="#5b6472"/>' +
+    '<rect x="20" y="41" width="24" height="4" rx="1" fill="#5b6472"/>' +
+    '<rect x="20" y="48" width="24" height="4" rx="1" fill="#5b6472"/>' +
+    '</svg>';
+  var ICON_RACK =
+    '<svg viewBox="0 0 64 64" width="72" height="72" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect x="4" y="22" width="56" height="20" rx="3" fill="#eef2f9" stroke="#5b6472" stroke-width="2"/>' +
+    '<rect x="9" y="27" width="18" height="10" rx="1" fill="#1e6fd9"/>' +
+    '<circle cx="34" cy="32" r="2.2" fill="#1f9d55"/>' +
+    '<circle cx="41" cy="32" r="2.2" fill="#5b6472"/>' +
+    '<rect x="47" y="28" width="9" height="8" rx="1" fill="#5b6472"/>' +
+    '</svg>';
+
+  function genericIcon(m){
+    var linha = (m.linha || '').toUpperCase();
+    if(linha.indexOf('RACK') !== -1 || linha.indexOf('ONLINE') !== -1) return ICON_RACK;
+    return ICON_TOWER;
+  }
+
+  // Foto oficial do produto (quando disponível no catálogo), com fallback para o ícone
+  // ilustrativo caso a imagem não carregue (offline, hotlink bloqueado, URL alterada).
+  function nobreakIcon(m){
+    if(m.img){
+      var fallback = genericIcon(m).replace(/"/g, '&quot;');
+      return '<img src="' + escapeHtml(m.img) + '" alt="Foto do ' + escapeHtml(m.modelo || 'nobreak') +
+        '" style="width:96px;height:96px;object-fit:contain;display:block;" ' +
+        'onerror="this.onerror=null;this.outerHTML=\'' + fallback + '\';">';
+    }
+    return genericIcon(m);
+  }
+
+  // ---------- relatório para impressão / PDF ----------
+  function buildReportHTML(m, result, desiredMin, totalLoad){
+    var now = new Date();
+    var dateStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    var clientName = els.bClientName ? els.bClientName.value.trim() : '';
+    var qtyText = result.bins.length === 1 ? '1 unidade' : result.bins.length + ' unidades';
+
+    var equipRows = equipamentos.map(function(e){
+      var total = e.poe ? 0 : e.power * e.qty;
+      return '<tr' + (e.poe ? ' style="color:#888;"' : '') + '>' +
+        '<td>' + escapeHtml(e.name) + (e.poe ? ' <span style="font-size:.7em;">(PoE — não soma)</span>' : '') + '</td>' +
+        '<td style="text-align:right;">' + fmt(e.power) + ' W</td>' +
+        '<td style="text-align:center;">' + e.qty + '</td>' +
+        '<td style="text-align:right;">' + fmt(total) + ' W</td>' +
+        '</tr>';
+    }).join('');
+
+    var binsHtml = result.bins.map(function(bin, i){
+      var minutes = (result.energyWh / bin.load) * 60;
+      var pct = Math.min(Math.round((bin.load / result.capacity) * 100), 999);
+      var groups = groupBinItems(bin.items);
+      var itemsList = groups.map(function(g){
+        return '<li>' + (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name) + ' <span style="color:#888;">(' + fmt(g.power) + ' W cada)</span></li>';
+      }).join('');
+      return '<div class="rp-bin">' +
+        '<div class="rp-bin-title">Nobreak ' + (i + 1) + ' de ' + result.bins.length + ' — ' + Math.min(pct, 100) + '% de carga · ~' + fmt(minutes, 0) + ' min de autonomia</div>' +
+        '<ul class="rp-bin-list">' + itemsList + '</ul>' +
+        '</div>';
+    }).join('');
+
+    var oversizedHtml = '';
+    if(result.oversized.length){
+      var overGroups = groupBinItems(result.oversized);
+      oversizedHtml = '<p class="rp-warning">Atenção: os itens a seguir são grandes demais para caber sozinhos em uma unidade deste modelo — ' +
+        overGroups.map(function(g){ return (g.qty > 1 ? g.qty + '× ' : '') + escapeHtml(g.name); }).join(', ') +
+        '.</p>';
+    }
+
+    return '<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8">' +
+      '<title>Relatório de nobreak' + (clientName ? ' — ' + escapeHtml(clientName) : '') + '</title>' +
+      '<style>' +
+      'body{font-family:Arial,Helvetica,sans-serif;color:#151a22;max-width:820px;margin:32px auto;padding:0 20px;}' +
+      'h1{font-size:1.5rem;margin-bottom:4px;}' +
+      '.rp-meta{color:#5b6472;font-size:.85rem;margin-bottom:24px;}' +
+      'h2{font-size:1.1rem;border-bottom:2px solid #1e6fd9;padding-bottom:6px;margin-top:32px;}' +
+      'table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.9rem;}' +
+      'th{text-align:left;border-bottom:2px solid #dbe1ea;padding:6px 8px;font-size:.78rem;text-transform:uppercase;letter-spacing:.4px;color:#5b6472;}' +
+      'td{padding:6px 8px;border-bottom:1px solid #eef2f9;}' +
+      '.rp-total{font-weight:bold;font-size:1.05rem;text-align:right;margin-top:10px;}' +
+      '.rp-nobreak-card{display:flex;gap:20px;align-items:center;background:#eef2f9;border-radius:12px;padding:18px 20px;margin-top:14px;}' +
+      '.rp-nobreak-card img{border-radius:8px;background:#fff;}' +
+      '.rp-nobreak-info h3{margin:0 0 4px;font-size:1.2rem;}' +
+      '.rp-nobreak-info .badge{display:inline-block;background:#e4edfc;color:#1e6fd9;font-size:.72rem;font-weight:bold;padding:2px 9px;border-radius:999px;margin-right:6px;}' +
+      '.rp-nobreak-info .specs{color:#5b6472;font-size:.88rem;margin-top:6px;}' +
+      '.rp-bin{border:1px solid #dbe1ea;border-radius:10px;padding:12px 16px;margin-top:12px;}' +
+      '.rp-bin-title{font-weight:bold;font-size:.9rem;margin-bottom:6px;}' +
+      '.rp-bin-list{margin:0;padding-left:20px;font-size:.88rem;}' +
+      '.rp-warning{background:#fbf0dd;color:#8a5b06;padding:10px 14px;border-radius:8px;font-size:.85rem;margin-top:14px;}' +
+      '.rp-footer{margin-top:40px;padding-top:14px;border-top:1px solid #dbe1ea;color:#5b6472;font-size:.78rem;}' +
+      '.rp-print-bar{position:sticky;top:0;background:#fff;padding:10px 0;margin-bottom:10px;border-bottom:1px solid #dbe1ea;}' +
+      '.rp-print-bar button{background:#1e6fd9;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-size:.9rem;font-weight:bold;cursor:pointer;}' +
+      '@media print{.rp-print-bar{display:none;}body{margin:0;}}' +
+      '</style></head><body>' +
+      '<div class="rp-print-bar"><button onclick="window.print()">🖨️ Imprimir / salvar como PDF</button></div>' +
+      '<h1>Proposta de dimensionamento de nobreak</h1>' +
+      '<div class="rp-meta">' + (clientName ? 'Cliente/projeto: <strong>' + escapeHtml(clientName) + '</strong> · ' : '') + 'Gerado em ' + dateStr + '</div>' +
+
+      '<h2>Equipamentos do rack</h2>' +
+      '<table><thead><tr><th>Equipamento</th><th style="text-align:right;">Potência</th><th style="text-align:center;">Qtd.</th><th style="text-align:right;">Total</th></tr></thead>' +
+      '<tbody>' + equipRows + '</tbody></table>' +
+      '<div class="rp-total">Carga total do rack: ' + fmt(totalLoad) + ' W</div>' +
+
+      '<h2>Nobreak recomendado</h2>' +
+      '<div class="rp-nobreak-card">' +
+        '<div>' + nobreakIcon(m) + '</div>' +
+        '<div class="rp-nobreak-info">' +
+          '<h3>' + escapeHtml(m.modelo) + '</h3>' +
+          (isIntelbras(m) ? '<span class="badge">Intelbras</span>' : '') +
+          '<span class="badge" style="background:#e5f7ec;color:#1f9d55;">' + qtyText + '</span>' +
+          '<div class="specs">Linha: ' + escapeHtml(m.linha || '—') + ' · ' + fmt(m.va) + ' VA / ' + fmt(m.w) + ' W · Bateria: ' + m.nbat + '× ' + m.vdc + 'V ' + m.ah + 'Ah</div>' +
+          '<div class="specs">Autonomia desejada: ' + fmt(desiredMin) + ' min</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<h2>Distribuição dos equipamentos entre as unidades</h2>' +
+      binsHtml +
+      oversizedHtml +
+
+      '<div class="rp-footer">Relatório gerado automaticamente pela Calculadora de Autonomia de Nobreak. Fotos meramente ilustrativas, cortesia do site oficial da Intelbras — cores e acabamento podem variar.</div>' +
+      '</body></html>';
+  }
+
+  function openReport(html){
+    var win = window.open('', '_blank');
+    if(!win){
+      showToast('Não foi possível abrir o relatório — verifique o bloqueador de pop-ups.');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  }
+
   function rankDistCandidates(desiredMin, margin, eff){
     var candidates = fullCatalog().map(function(m){
       var result = packEquipment(m, eff, desiredMin, margin);
@@ -757,12 +899,18 @@
         '.</div>';
     }
 
+    html += '<div class="dist-option-actions"><button type="button" class="btn-report" data-report-idx="' + idx + '">📄 Gerar relatório desta opção</button></div>';
+
     html += '</div>';
     return html;
   }
 
+  var lastChoices = [];
+  var lastManualChoice = null;
+
   function updateDistribution(load, desiredMin, margin, eff){
     var choices = bestDistributionChoices(desiredMin, margin, eff, 3);
+    lastChoices = choices;
     if(!choices.length){
       els.bDistResult.innerHTML = '<div class="dist-warning">Nenhum modelo do catálogo sustenta ' + fmt(desiredMin) + ' min com a margem definida.</div>';
       return;
@@ -770,6 +918,18 @@
     els.bDistResult.innerHTML = choices.map(function(choice, idx){
       return renderDistOption(choice, idx, desiredMin);
     }).join('');
+  }
+
+  if(els.bDistResult){
+    els.bDistResult.addEventListener('click', function(ev){
+      var btn = ev.target.closest ? ev.target.closest('.btn-report') : null;
+      if(!btn) return;
+      var idx = parseInt(btn.getAttribute('data-report-idx'), 10);
+      var choice = lastChoices[idx];
+      if(choice && lastDistParams){
+        openReport(buildReportHTML(choice.m, choice.result, lastDistParams.desiredMin, lastDistParams.load));
+      }
+    });
   }
 
   // ---------- escolha manual de nobreak ----------
@@ -797,8 +957,11 @@
     var result = packEquipment(m, lastDistParams.eff, lastDistParams.desiredMin, lastDistParams.margin);
     if(result.capacity <= 0){
       els.bManualResult.innerHTML = '<div class="dist-warning">Este modelo não sustenta ' + fmt(lastDistParams.desiredMin) + ' min com a margem definida.</div>';
+      lastManualChoice = null;
       return;
     }
+
+    lastManualChoice = {m: m, result: result};
 
     var qtyText = result.bins.length === 1 ? '1 unidade' : result.bins.length + ' unidades';
     var avgPct = Math.round(result.bins.reduce(function(s, b){ return s + (b.load / result.capacity); }, 0) / result.bins.length * 100);
@@ -811,7 +974,19 @@
         '.</div>';
     }
 
+    html += '<div class="dist-option-actions"><button type="button" class="btn-report" id="b-manual-report-btn">📄 Gerar relatório deste modelo</button></div>';
+
     els.bManualResult.innerHTML = html;
+  }
+
+  if(els.bManualResult){
+    els.bManualResult.addEventListener('click', function(ev){
+      var btn = ev.target.closest ? ev.target.closest('#b-manual-report-btn') : null;
+      if(!btn) return;
+      if(lastManualChoice && lastDistParams){
+        openReport(buildReportHTML(lastManualChoice.m, lastManualChoice.result, lastDistParams.desiredMin, lastDistParams.load));
+      }
+    });
   }
 
   function recalc(){

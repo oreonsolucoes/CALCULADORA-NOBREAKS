@@ -531,6 +531,25 @@
     line-height:1.5;
   }
 
+  .dist-option-actions{
+    margin-top:12px;
+    padding-top:12px;
+    border-top:1px dashed var(--border);
+    text-align:right;
+  }
+  .btn-report{
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:.78rem;
+    padding:8px 14px;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  .btn-report:hover{border-color:var(--accent);color:var(--accent);}
+
   .dist-option{
     border:1px solid var(--border);
     border-radius:12px;
