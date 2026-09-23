@@ -1,0 +1,16 @@
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+
+# Arquivos temporários / lock do Office
+~$*.xlsm
+~$*.xlsx
+~$*.docx
+
+# Node (caso algum dia entre alguma ferramenta de build)
+node_modules/

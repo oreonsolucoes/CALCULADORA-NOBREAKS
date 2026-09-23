@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calculadora de Autonomia de Nobreak</title>
+<meta name="description" content="Calcule a autonomia de um nobreak a partir dos equipamentos do rack, ou dimensione e distribua a carga entre múltiplos nobreaks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <span class="eyebrow">Ferramenta bidirecional</span>
+      <h1>Autonomia de Nobreak</h1>
+    </div>
+    <div class="tag">Rack ⇄ Nobreak</div>
+  </header>
+
+  <nav class="quicknav" id="quicknav" aria-label="Navegação rápida">
+    <button type="button" class="qn-link" data-target="equip">Equipamentos</button>
+    <button type="button" class="qn-link" data-target="config">Configuração</button>
+    <button type="button" class="qn-link" data-target="result">Resultado</button>
+    <button type="button" class="qn-tour" id="tour-btn">🧭 Tour guiado</button>
+  </nav>
+
+  <div class="mode-switch" role="tablist" aria-label="Modo de cálculo">
+    <button class="mode-btn active" id="mode-a-btn" role="tab" aria-selected="true">
+      <span class="k">Modo 1</span>
+      Já tenho um nobreak
+    </button>
+    <button class="mode-btn" id="mode-b-btn" role="tab" aria-selected="false">
+      <span class="k">Modo 2</span>
+      Quero dimensionar um nobreak
+    </button>
+  </div>
+
+  <div class="grid">
+    <!-- Equipamentos (comum aos dois modos) -->
+    <div class="card" id="equip-section">
+      <div class="card-header-row">
+        <h2><span class="dot"></span>Equipamentos do rack</h2>
+        <div class="card-header-actions">
+          <button type="button" class="btn-tiny" id="btn-load-example">Carregar exemplo</button>
+          <button type="button" class="btn-tiny btn-tiny-danger" id="btn-clear-all">Limpar tudo</button>
+        </div>
+      </div>
+      <span class="example-note" id="eq-note">Valores de exemplo — edite para o seu rack</span>
+      <p class="hint" style="margin-top:0;">Catálogo com <strong id="catalog-count">0</strong> equipamentos que vão direto na tomada (nobreaks, switches, centrais, fontes, DVR/NVR, servidores, monitores, catracas). Câmeras, leitores, sensores, cabos e acessórios PoE/alimentados por controladora não entram — eles nunca contam separado.</p>
+
+      <div class="add-form">
+        <div>
+          <label class="field-label" for="eq-name">Equipamento</label>
+          <input id="eq-name" type="text" placeholder="Digite ou escolha do catálogo" list="eq-catalog-dl" autocomplete="off" />
+          <datalist id="eq-catalog-dl"></datalist>
+        </div>
+        <div>
+          <label class="field-label" for="eq-power">Potência (W)</label>
+          <input id="eq-power" type="number" min="0" step="1" placeholder="0" />
+        </div>
+        <div>
+          <label class="field-label" for="eq-qty">Qtd.</label>
+          <input id="eq-qty" type="number" min="1" step="1" value="1" />
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:6px;">
+          <button class="btn-add" id="btn-add">Adicionar</button>
+          <button class="btn-cancel-edit" id="btn-cancel-edit" type="button" hidden>Cancelar</button>
+        </div>
+      </div>
+
+      <label class="poe-check-row" for="eq-poe">
+        <input type="checkbox" id="eq-poe" />
+        Alimentado via PoE por um switch (não soma na tomada — só o switch conta)
+      </label>
+
+      <div class="eq-search-row">
+        <input id="eq-search" type="search" placeholder="Buscar na lista adicionada..." aria-label="Buscar equipamento na lista" />
+      </div>
+
+      <table class="eq-table">
+        <thead>
+          <tr>
+            <th>Equipamento</th>
+            <th style="text-align:right;">W un.</th>
+            <th style="text-align:center;">Qtd.</th>
+            <th style="text-align:right;">Total (W)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="eq-body"></tbody>
+      </table>
+
+      <div class="total-row">
+        <span class="label">Carga total do rack</span>
+        <span class="value" id="total-load">0 W</span>
+      </div>
+      <p class="hint">Equipamentos marcados <span class="poe-badge">PoE</span> não entram na soma — a potência deles já está dentro do consumo do switch PoE que os alimenta.</p>
+    </div>
+
+    <!-- Coluna direita: inputs + resultado, trocam conforme o modo -->
+    <div>
+      <!-- MODO A: tenho um nobreak -->
+      <div id="panel-a">
+        <div class="card" id="a-config-card">
+          <h2><span class="dot"></span>Especificações do nobreak</h2>
+
+          <div class="field full">
+            <label class="field-label" for="a-model">Modelo do nobreak</label>
+            <select id="a-model"></select>
+          </div>
+          <div class="model-info" id="a-model-info" hidden></div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="a-va">Potência nominal (VA)</label>
+              <input id="a-va" type="number" min="0" step="10" value="1500" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="a-pf">Fator de potência</label>
+              <input id="a-pf" type="number" min="0.1" max="1" step="0.01" value="0.70" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="a-ah">Bateria (Ah)</label>
+              <input id="a-ah" type="number" min="0" step="0.5" value="7" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="a-vdc">Tensão da bateria (V)</label>
+              <input id="a-vdc" type="number" min="1" step="1" value="12" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="a-nbat">Nº de baterias</label>
+              <input id="a-nbat" type="number" min="1" step="1" value="1" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="a-eff">Eficiência do inversor (%)</label>
+              <input id="a-eff" type="number" min="10" max="100" step="1" value="70" />
+            </div>
+          </div>
+
+          <button class="btn-ghost" id="btn-custom-toggle" type="button">+ Adicionar nobreak personalizado à lista</button>
+
+          <div class="custom-form" id="custom-form" hidden>
+            <div class="custom-form-title">Novo nobreak personalizado</div>
+            <div class="field-grid">
+              <div class="field full">
+                <label class="field-label" for="c-name">Nome / modelo</label>
+                <input id="c-name" type="text" placeholder="Ex: Meu Nobreak 2200" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="c-va">Potência (VA)</label>
+                <input id="c-va" type="number" min="0" step="10" placeholder="2200" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="c-w">Potência real (W)</label>
+                <input id="c-w" type="number" min="0" step="10" placeholder="1100" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="c-vdc">Tensão da bateria (V)</label>
+                <input id="c-vdc" type="number" min="1" step="1" value="12" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="c-ah">Bateria (Ah)</label>
+                <input id="c-ah" type="number" min="0" step="0.5" placeholder="9" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="c-nbat">Nº de baterias</label>
+                <input id="c-nbat" type="number" min="1" step="1" value="1" />
+              </div>
+            </div>
+            <div class="custom-form-actions">
+              <button class="btn-save" id="btn-custom-save" type="button">Salvar na lista</button>
+              <button class="btn-cancel" id="btn-custom-cancel" type="button">Cancelar</button>
+            </div>
+          </div>
+
+          <p class="hint">O fator de potência é calculado a partir de VA e W reais de cada modelo. Ajuste manualmente se preferir.</p>
+        </div>
+
+        <div class="card" id="a-result-card">
+          <h2><span class="dot"></span>Autonomia estimada</h2>
+          <div class="result-hero">
+            <div class="eyebrow">Tempo estimado de backup</div>
+            <div class="big-num" id="a-big">— <small>min</small></div>
+            <div class="sub" id="a-sub">preencha os equipamentos e o nobreak</div>
+            <div class="status-pill ok" id="a-pill"><span class="dot2"></span><span id="a-pill-text">OK</span></div>
+          </div>
+          <div class="load-bar-wrap">
+            <div class="load-bar-labels">
+              <span>Carga / capacidade do nobreak</span>
+              <span id="a-load-pct">0%</span>
+            </div>
+            <div class="load-bar"><div class="load-bar-fill" id="a-load-fill" style="width:0%"></div></div>
+          </div>
+          <div class="mini-stats">
+            <div class="mini-stat"><div class="l">Carga total</div><div class="v" id="a-stat-load">0 W</div></div>
+            <div class="mini-stat"><div class="l">Potência útil do nobreak</div><div class="v" id="a-stat-cap">0 W</div></div>
+            <div class="mini-stat"><div class="l">Energia disponível</div><div class="v" id="a-stat-energy">0 Wh</div></div>
+            <div class="mini-stat"><div class="l">Autonomia</div><div class="v" id="a-stat-time">0h 0min</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODO B: quero dimensionar -->
+      <div id="panel-b" hidden>
+        <div class="card" id="b-config-card">
+          <h2><span class="dot"></span>Autonomia desejada</h2>
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="b-min">Autonomia desejada (min)</label>
+              <input id="b-min" type="number" min="0" step="1" value="30" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="b-margin">Margem de segurança (%)</label>
+              <input id="b-margin" type="number" min="0" max="200" step="5" value="20" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="b-vdc">Tensão da bateria (V)</label>
+              <input id="b-vdc" type="number" min="1" step="1" value="12" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="b-eff">Eficiência do inversor (%)</label>
+              <input id="b-eff" type="number" min="10" max="100" step="1" value="70" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="b-pf">Fator de potência do nobreak</label>
+              <input id="b-pf" type="number" min="0.1" max="1" step="0.05" value="0.70" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="b-batah">Ah por bateria (referência)</label>
+              <input id="b-batah" type="number" min="1" step="0.5" value="7" />
+            </div>
+          </div>
+          <p class="hint">A margem de segurança compensa perda de capacidade da bateria com o tempo e picos de carga (inrush).</p>
+        </div>
+
+        <div class="card" id="b-result-card">
+          <h2><span class="dot"></span>Nobreak necessário</h2>
+          <div class="result-hero">
+            <div class="eyebrow">Capacidade de bateria mínima</div>
+            <div class="big-num" id="b-big">— <small>Ah</small></div>
+            <div class="sub" id="b-sub">preencha os equipamentos e a autonomia desejada</div>
+          </div>
+          <div class="mini-stats">
+            <div class="mini-stat"><div class="l">Carga total</div><div class="v" id="b-stat-load">0 W</div></div>
+            <div class="mini-stat"><div class="l">Energia necessária</div><div class="v" id="b-stat-energy">0 Wh</div></div>
+            <div class="mini-stat"><div class="l">Potência mínima do nobreak</div><div class="v" id="b-stat-va">0 VA</div></div>
+            <div class="mini-stat"><div class="l">Baterias em paralelo (ref.)</div><div class="v" id="b-stat-nbat">0×</div></div>
+          </div>
+          <div class="suggestion-box" id="b-suggestion">
+            Preencha os campos para ver a recomendação.
+          </div>
+
+          <div class="dist-block">
+            <label class="field-label">Distribuição sugerida entre nobreaks</label>
+            <p class="hint" style="margin-top:0;">O sistema escolhe automaticamente o modelo que exige o menor número de unidades — sempre preferindo menos nobreaks a mais.</p>
+            <div id="b-dist-result"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+<div class="tour-blocker" id="tour-blocker" hidden></div>
+<div class="tour-tooltip" id="tour-tooltip" hidden role="dialog" aria-modal="true" aria-labelledby="tour-title">
+  <div class="tour-step-count" id="tour-step-count">1 / 1</div>
+  <div class="tour-tooltip-title" id="tour-title">Título</div>
+  <div class="tour-tooltip-text" id="tour-text">Texto</div>
+  <div class="tour-tooltip-actions">
+    <button type="button" id="tour-skip" class="btn-cancel">Pular tour</button>
+    <div class="tour-nav-btns">
+      <button type="button" id="tour-prev" class="btn-cancel">Voltar</button>
+      <button type="button" id="tour-next" class="btn-save">Próximo</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/data-nobreaks.js"></script>
+<script src="js/data-equipamentos.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
