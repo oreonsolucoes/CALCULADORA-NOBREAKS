@@ -3,6 +3,7 @@
   var LS_CUSTOM = 'nobreak_calc_custom_models_v1';
   var LS_TOUR_SEEN = 'nobreak_calc_tour_seen_v1';
   var LS_LEARNED_POWER = 'nobreak_calc_learned_power_v1';
+  var LS_THEME = 'nobreak_calc_theme_v1';
 
   // ---------- catálogo de nobreaks (dados em js/data-nobreaks.js) ----------
   var presetCatalog = (typeof NOBREAK_PRESET_CATALOG !== 'undefined' ? NOBREAK_PRESET_CATALOG.slice() : []);
@@ -62,6 +63,7 @@
     customCancel: document.getElementById('btn-custom-cancel'),
     cName: document.getElementById('c-name'),
     cVa: document.getElementById('c-va'),
+    cNbat: document.getElementById('c-nbat'),
 
     // modo B
     bMin: document.getElementById('b-min'),
@@ -89,6 +91,14 @@
     bcCancel: document.getElementById('btn-bc-cancel'),
     bcName: document.getElementById('bc-name'),
     bcVa: document.getElementById('bc-va'),
+    bcNbat: document.getElementById('bc-nbat'),
+
+    // gráfico de distribuição de carga
+    loadChartCard: document.getElementById('load-chart-card'),
+    loadChart: document.getElementById('load-chart'),
+
+    // tema claro/escuro
+    themeToggle: document.getElementById('theme-toggle'),
 
     // navegação e feedback
     quicknav: document.getElementById('quicknav'),
@@ -474,10 +484,12 @@
     var name = els.cName.value.trim();
     var va = parseFloat(els.cVa.value);
 
+    var userNbat = parseFloat(els.cNbat.value);
+
     if(!name){ els.cName.focus(); return; }
     if(!isFinite(va) || va <= 0){ els.cVa.focus(); return; }
 
-    var specs = estimateNobreakSpecs(va);
+    var specs = estimateNobreakSpecs(va, userNbat);
     var novo = {
       id: 'custom-' + Date.now(),
       linha: 'Personalizado',
@@ -496,8 +508,9 @@
 
     els.cName.value = '';
     els.cVa.value = '';
+    els.cNbat.value = '';
     els.customForm.hidden = true;
-    showToast('Nobreak "' + name + '" salvo — ' + fmt(specs.w) + ' W estimados');
+    showToast('Nobreak "' + name + '" salvo — ' + fmt(specs.w) + ' W, ' + specs.nbat + '× bateria');
   });
 
   if(els.bManualModel){
@@ -508,10 +521,11 @@
   // Para quem não usa as linhas já cadastradas (XNB, ATTIV, Gamer, Rack/Torre, Online):
   // a potência real (W) e a bateria são estimadas a partir do VA, usando a mesma
   // faixa típica dos nobreaks interativos/semissenoidais mais comuns do mercado.
-  function estimateNobreakSpecs(va){
+  function estimateNobreakSpecs(va, userNbat){
     var w = Math.round(va * 0.6 / 10) * 10; // fator de potência típico ~0.6 (interativo/semissenoidal)
     var vdc = 12;
-    var nbat = va <= 900 ? 1 : (va <= 2200 ? 2 : Math.max(2, Math.ceil(va / 1500)));
+    var estimatedNbat = va <= 900 ? 1 : (va <= 2200 ? 2 : Math.max(2, Math.ceil(va / 1500)));
+    var nbat = (isFinite(userNbat) && userNbat > 0) ? Math.round(userNbat) : estimatedNbat;
     var ah = va <= 900 ? 7 : 9;
     return {w: w, vdc: vdc, ah: ah, nbat: nbat};
   }
@@ -532,10 +546,12 @@
       var name = els.bcName.value.trim();
       var va = parseFloat(els.bcVa.value);
 
+      var userNbat = parseFloat(els.bcNbat.value);
+
       if(!name){ els.bcName.focus(); return; }
       if(!isFinite(va) || va <= 0){ els.bcVa.focus(); return; }
 
-      var specs = estimateNobreakSpecs(va);
+      var specs = estimateNobreakSpecs(va, userNbat);
       var novo = {
         id: 'custom-' + Date.now(),
         linha: 'Personalizado',
@@ -554,8 +570,9 @@
 
       els.bcName.value = '';
       els.bcVa.value = '';
+      els.bcNbat.value = '';
       els.bcForm.hidden = true;
-      showToast('Nobreak "' + name + '" salvo — ' + fmt(specs.w) + ' W estimados');
+      showToast('Nobreak "' + name + '" salvo — ' + fmt(specs.w) + ' W, ' + specs.nbat + '× bateria');
     });
   }
 
@@ -1137,6 +1154,54 @@
     } else {
       recalcModeB(load);
     }
+    renderLoadChart();
+  }
+
+  // ---------- gráfico de distribuição de carga por equipamento ----------
+  var LOAD_CHART_MAX_ITEMS = 8;
+  function renderLoadChart(){
+    if(!els.loadChartCard || !els.loadChart) return;
+    var totals = {};
+    var order = [];
+    equipamentos.forEach(function(e){
+      if(e.poe) return;
+      var key = e.name;
+      if(!(key in totals)){ totals[key] = 0; order.push(key); }
+      totals[key] += e.power * e.qty;
+    });
+    var items = order.map(function(name){ return {name: name, total: totals[name]}; }).filter(function(it){ return it.total > 0; });
+    items.sort(function(a, b){ return b.total - a.total; });
+
+    if(!items.length){
+      els.loadChartCard.hidden = true;
+      els.loadChart.innerHTML = '';
+      return;
+    }
+    els.loadChartCard.hidden = false;
+
+    var grandTotal = items.reduce(function(s, it){ return s + it.total; }, 0);
+    var maxVal = items[0].total;
+    var shown = items.slice(0, LOAD_CHART_MAX_ITEMS);
+    var rest = items.slice(LOAD_CHART_MAX_ITEMS);
+
+    var rowsHtml = shown.map(function(it){
+      var pct = grandTotal > 0 ? Math.round((it.total / grandTotal) * 100) : 0;
+      var barPct = maxVal > 0 ? Math.max(4, Math.round((it.total / maxVal) * 100)) : 0;
+      return '<div class="load-chart-row">' +
+        '<span class="load-chart-label" title="' + escapeHtml(it.name) + ' — ' + fmt(it.total) + ' W">' + escapeHtml(it.name) +
+          ' <span class="load-chart-watts">' + fmt(it.total) + ' W</span></span>' +
+        '<span class="load-chart-track"><span class="load-chart-fill" style="width:' + barPct + '%;"></span></span>' +
+        '<span class="load-chart-value">' + pct + '%</span>' +
+        '</div>';
+    }).join('');
+
+    var restHtml = '';
+    if(rest.length){
+      var restTotal = rest.reduce(function(s, it){ return s + it.total; }, 0);
+      restHtml = '<p class="hint" style="margin-top:10px;margin-bottom:0;">+ ' + rest.length + ' outro(s) equipamento(s) — ' + fmt(restTotal) + ' W no total.</p>';
+    }
+
+    els.loadChart.innerHTML = rowsHtml + restHtml;
   }
 
   // ---------- navegação rápida (quicknav) ----------
@@ -1160,6 +1225,8 @@
     {mode: null, sel: 'header.top', title: 'Bem-vindo!', text: 'Esta ferramenta calcula a autonomia de um nobreak a partir dos equipamentos do seu rack — ou, ao contrário, ajuda a escolher o nobreak certo para o tempo de backup que você precisa. Vamos ver como usar.'},
     {mode: null, sel: '#eq-name', title: 'Catálogo de equipamentos', text: 'Digite aqui para buscar entre centenas de equipamentos já cadastrados (nobreaks, switches, centrais, servidores...). Você também pode digitar um nome livre se o item não estiver na lista.'},
     {mode: null, sel: '.eq-table', title: 'Editar e remover', text: 'Use o ✎ para editar um item já adicionado, ou o × para removê-lo. A busca acima da tabela ajuda quando a lista crescer.'},
+    {mode: null, sel: '#load-chart-card', title: 'Distribuição de carga', text: 'Este gráfico mostra quanto cada equipamento pesa na carga total — útil para identificar rapidamente o que mais consome energia no rack.'},
+    {mode: null, sel: '#theme-toggle', title: 'Tema claro/escuro', text: 'Clique aqui para alternar entre tema claro e escuro a qualquer momento.'},
     {mode: null, sel: '.mode-switch', title: 'Duas abas, dois modos de cálculo', text: 'Vamos ver as duas: "Já tenho um nobreak" calcula a autonomia de um nobreak que você já possui. "Quero dimensionar" faz o caminho inverso — você diz quanto tempo precisa e a ferramenta calcula o que comprar.'},
     {mode: 'a', sel: '#a-model', title: 'Aba 1 · Modelo do nobreak', text: 'Escolha um modelo do catálogo (XNB, ATTIV, Gamer, etc.) para preencher VA, bateria e fator de potência automaticamente — ou configure manualmente.'},
     {mode: 'a', sel: '#a-result-card', title: 'Aba 1 · Autonomia estimada', text: 'Aqui aparece o tempo estimado de backup, o quanto da capacidade do nobreak está sendo usado e um alerta se a carga estiver perto do limite.'},
@@ -1233,6 +1300,21 @@
     els.tourBlocker.hidden = true;
     els.tourTooltip.hidden = true;
     try{ localStorage.setItem(LS_TOUR_SEEN, '1'); }catch(e){}
+  }
+
+  // ---------- tema claro/escuro ----------
+  function effectiveTheme(){
+    var explicit = document.documentElement.getAttribute('data-theme');
+    if(explicit === 'light' || explicit === 'dark') return explicit;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return prefersDark ? 'dark' : 'light';
+  }
+  if(els.themeToggle){
+    els.themeToggle.addEventListener('click', function(){
+      var next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try{ localStorage.setItem(LS_THEME, next); }catch(e){}
+    });
   }
 
   els.tourBtn.addEventListener('click', startTour);

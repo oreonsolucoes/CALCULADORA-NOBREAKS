@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Calculadora de Autonomia de Nobreak</title>
 <meta name="description" content="Calcule a autonomia de um nobreak a partir dos equipamentos do rack, ou dimensione e distribua a carga entre múltiplos nobreaks.">
+<meta name="theme-color" content="#1e6fd9">
+<script>
+  // aplica o tema salvo antes do CSS renderizar, para evitar "flash" da cor errada
+  (function(){
+    try{
+      var t = localStorage.getItem('nobreak_calc_theme_v1');
+      if(t === 'light' || t === 'dark'){ document.documentElement.setAttribute('data-theme', t); }
+    }catch(e){}
+  })();
+</script>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='4' width='56' height='56' rx='14' fill='%231e6fd9'/%3E%3Cpath d='M35 10 16 34h11l-3 20 21-26H34l4-18z' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -17,7 +28,13 @@
       <span class="eyebrow">Ferramenta bidirecional</span>
       <h1>Autonomia de Nobreak</h1>
     </div>
-    <div class="tag">Rack ⇄ Nobreak</div>
+    <div class="header-actions">
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Alternar tema claro/escuro" title="Alternar tema claro/escuro">
+        <span class="theme-icon theme-icon-sun">☀️</span>
+        <span class="theme-icon theme-icon-moon">🌙</span>
+      </button>
+      <div class="tag">Rack ⇄ Nobreak</div>
+    </div>
   </header>
 
   <nav class="quicknav" id="quicknav" aria-label="Navegação rápida">
@@ -39,6 +56,8 @@
   </div>
 
   <div class="grid">
+    <!-- Coluna esquerda: equipamentos + gráfico de distribuição -->
+    <div>
     <!-- Equipamentos (comum aos dois modos) -->
     <div class="card" id="equip-section">
       <div class="card-header-row">
@@ -94,6 +113,13 @@
       </div>
     </div>
 
+    <!-- Gráfico de distribuição de carga por equipamento -->
+    <div class="card" id="load-chart-card" hidden>
+      <h2><span class="dot"></span>Distribuição de carga</h2>
+      <div id="load-chart"></div>
+    </div>
+    </div>
+
     <!-- Coluna direita: inputs + resultado, trocam conforme o modo -->
     <div>
       <!-- MODO A: tenho um nobreak -->
@@ -147,8 +173,12 @@
                 <label class="field-label" for="c-va">Potência (VA)</label>
                 <input id="c-va" type="number" min="0" step="10" placeholder="2200" />
               </div>
+              <div class="field">
+                <label class="field-label" for="c-nbat">Nº de baterias</label>
+                <input id="c-nbat" type="number" min="1" step="1" placeholder="Ex: 2" />
+              </div>
             </div>
-            <p class="hint">É só isso — a potência real (W), tensão e bateria são estimadas automaticamente a partir do VA informado. Se quiser, ajuste os campos acima (VA/PF/bateria) depois de selecionar o modelo.</p>
+            <p class="hint">A potência real (W), tensão e capacidade (Ah) da bateria são estimadas automaticamente a partir do VA informado. Se deixar o nº de baterias em branco, também estimamos um valor típico.</p>
             <div class="custom-form-actions">
               <button class="btn-save" id="btn-custom-save" type="button">Salvar na lista</button>
               <button class="btn-cancel" id="btn-custom-cancel" type="button">Cancelar</button>
@@ -249,8 +279,12 @@
                   <label class="field-label" for="bc-va">Potência (VA)</label>
                   <input id="bc-va" type="number" min="0" step="10" placeholder="2200" />
                 </div>
+                <div class="field">
+                  <label class="field-label" for="bc-nbat">Nº de baterias</label>
+                  <input id="bc-nbat" type="number" min="1" step="1" placeholder="Ex: 2" />
+                </div>
               </div>
-              <p class="hint">É só isso — a potência real (W) e a bateria são estimadas automaticamente a partir do VA informado.</p>
+              <p class="hint">A potência real (W) e a capacidade da bateria são estimadas a partir do VA. Se deixar o nº de baterias em branco, também estimamos um valor típico.</p>
               <div class="custom-form-actions">
                 <button class="btn-save" id="btn-bc-save" type="button">Salvar e usar</button>
                 <button class="btn-cancel" id="btn-bc-cancel" type="button">Cancelar</button>
