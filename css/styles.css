@@ -1042,3 +1042,18 @@
   .cat-item.cat-item-readonly .cat-item-actions .cat-del-btn,
   .cat-item.cat-item-readonly .cat-item-actions .cat-edit-btn{display:none;}
   .cat-empty{color:var(--text-dim);font-size:.86rem;padding:10px 0;}
+
+  /* ---------- preço do nobreak (edição inline) ---------- */
+  .model-price-row{margin:8px 0 14px;}
+  .price-display-row,.price-edit-row{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:8px;
+    font-size:.86rem;
+  }
+  .price-label{color:var(--text-dim);font-weight:600;}
+  .price-value{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;}
+  .price-edit-row .field-label{margin-bottom:0;margin-right:2px;}
+  .price-input{width:130px;}
+  .price-display-row .btn-tiny,.price-edit-row .btn-tiny{padding:4px 10px;font-size:.74rem;}

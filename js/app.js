@@ -5,6 +5,9 @@
   var LS_LEARNED_POWER = 'nobreak_calc_learned_power_v1';
   var LS_THEME = 'nobreak_calc_theme_v1';
   var LS_USER_CATALOG = 'nobreak_calc_user_catalog_v1';
+  var LS_CATALOG_OVERRIDES = 'nobreak_calc_catalog_overrides_v1';
+  var LS_CATALOG_DELETED = 'nobreak_calc_catalog_deleted_v1';
+  var LS_NOBREAK_PRICES = 'nobreak_calc_nobreak_prices_v1';
 
   // ---------- catálogo de nobreaks (dados em js/data-nobreaks.js) ----------
   var presetCatalog = (typeof NOBREAK_PRESET_CATALOG !== 'undefined' ? NOBREAK_PRESET_CATALOG.slice() : []);
@@ -72,6 +75,7 @@
     aStatTime: document.getElementById('a-stat-time'),
     aClientName: document.getElementById('a-client-name'),
     aReportBtn: document.getElementById('a-report-btn'),
+    aModelPrice: document.getElementById('a-model-price'),
 
     // custom form
     customToggle: document.getElementById('btn-custom-toggle'),
@@ -81,6 +85,7 @@
     cName: document.getElementById('c-name'),
     cVa: document.getElementById('c-va'),
     cNbat: document.getElementById('c-nbat'),
+    cPrice: document.getElementById('c-price'),
 
     // modo B
     bMin: document.getElementById('b-min'),
@@ -99,6 +104,7 @@
     bDistResult: document.getElementById('b-dist-result'),
     bManualModel: document.getElementById('b-manual-model'),
     bManualResult: document.getElementById('b-manual-result'),
+    bManualPrice: document.getElementById('b-manual-price'),
     bClientName: document.getElementById('b-client-name'),
 
     // cadastro simplificado de nobreak (modo B — nome + VA)
@@ -109,6 +115,7 @@
     bcName: document.getElementById('bc-name'),
     bcVa: document.getElementById('bc-va'),
     bcNbat: document.getElementById('bc-nbat'),
+    bcPrice: document.getElementById('bc-price'),
 
     // gráfico de distribuição de carga
     loadChartCard: document.getElementById('load-chart-card'),
@@ -429,6 +436,7 @@
 
   // ---------- catálogo de equipamentos (aba GERAL) ----------
   var equipCatalog = (typeof EQUIP_CATALOG !== 'undefined') ? EQUIP_CATALOG : [];
+  equipCatalog.forEach(function(it, i){ it.id = 'static-' + i; });
   var catalogByLabelLower = {};
 
   // ---------- catálogo cadastrado pelo usuário (com categorias, editável) ----------
@@ -446,8 +454,47 @@
   var catEditId = null;
   var catSearchTerm = '';
 
-  function userCatalogLabel(item){
-    return '[' + item.category + '] ' + item.name;
+  // ---------- correções/edições feitas pelo usuário em itens do catálogo de
+  // referência (não editamos o arquivo estático — guardamos por cima dele) ----------
+  function loadJsonMap(key){
+    try{
+      var raw = localStorage.getItem(key);
+      var obj = raw ? JSON.parse(raw) : {};
+      return (obj && typeof obj === 'object') ? obj : {};
+    }catch(e){ return {}; }
+  }
+  function saveJsonMap(key, obj){
+    try{ localStorage.setItem(key, JSON.stringify(obj)); }catch(e){}
+  }
+  var catalogOverrides = loadJsonMap(LS_CATALOG_OVERRIDES);
+  var catalogDeleted = loadJsonMap(LS_CATALOG_DELETED);
+  function saveCatalogOverrides(){ saveJsonMap(LS_CATALOG_OVERRIDES, catalogOverrides); }
+  function saveCatalogDeleted(){ saveJsonMap(LS_CATALOG_DELETED, catalogDeleted); }
+
+  function staticItemName(it){
+    return it.l.replace(/^\[[^\]]*\]\s*/, '');
+  }
+
+  // Lista "efetiva" do catálogo: itens estáticos (com edições/exclusões do
+  // usuário aplicadas por cima) + itens cadastrados pelo usuário — tudo com o
+  // mesmo formato, para que a gestão (editar/excluir) funcione igual pra todos.
+  function effectiveCatalogItems(){
+    var out = [];
+    equipCatalog.forEach(function(it){
+      if(catalogDeleted[it.id]) return;
+      var ov = catalogOverrides[it.id];
+      out.push({
+        id: it.id,
+        name: (ov && ov.name) || staticItemName(it),
+        power: (ov && isFinite(ov.power)) ? ov.power : it.w,
+        category: (ov && ov.category) || it.c || CAT_FALLBACK,
+        isStatic: true
+      });
+    });
+    userCatalog.forEach(function(it){
+      out.push({id: it.id, name: it.name, power: it.power, category: it.category, isStatic: false});
+    });
+    return out;
   }
 
   // ---------- potências aprendidas (equipamentos digitados/corrigidos pelo usuário) ----------
@@ -462,16 +509,14 @@
   }
   var learnedPower = loadLearnedPower();
 
-  // Reconstrói o índice de busca (nome -> item) a partir do catálogo estático +
-  // catálogo do usuário, aplicando por cima as potências aprendidas/corrigidas.
+  // Reconstrói o índice de busca (nome -> item) a partir da lista efetiva do
+  // catálogo, aplicando por cima as potências aprendidas/corrigidas.
   function rebuildCatalogIndex(){
     catalogByLabelLower = {};
-    equipCatalog.forEach(function(it){
-      catalogByLabelLower[it.l.trim().toLowerCase()] = it;
-    });
-    userCatalog.forEach(function(it){
-      var entry = {l: userCatalogLabel(it), w: it.power, c: it.category};
-      catalogByLabelLower[entry.l.trim().toLowerCase()] = entry;
+    effectiveCatalogItems().forEach(function(it){
+      var label = '[' + it.category + '] ' + it.name;
+      var entry = {l: label, w: it.power, c: it.category};
+      catalogByLabelLower[label.trim().toLowerCase()] = entry;
       // também indexa só pelo nome, para quem digitar sem o prefixo de categoria
       var nameKey = it.name.trim().toLowerCase();
       if(!catalogByLabelLower[nameKey]) catalogByLabelLower[nameKey] = entry;
@@ -498,20 +543,16 @@
 
   function renderCatalogDatalist(){
     if(!els.catalogDl) return;
+    var items = effectiveCatalogItems();
     var frag = document.createDocumentFragment();
-    equipCatalog.forEach(function(it){
+    items.forEach(function(it){
       var opt = document.createElement('option');
-      opt.value = it.l;
-      frag.appendChild(opt);
-    });
-    userCatalog.forEach(function(it){
-      var opt = document.createElement('option');
-      opt.value = userCatalogLabel(it);
+      opt.value = '[' + it.category + '] ' + it.name;
       frag.appendChild(opt);
     });
     els.catalogDl.innerHTML = '';
     els.catalogDl.appendChild(frag);
-    if(els.catalogCount) els.catalogCount.textContent = equipCatalog.length + userCatalog.length;
+    if(els.catalogCount) els.catalogCount.textContent = items.length;
   }
 
   els.name.addEventListener('input', function(){
@@ -530,11 +571,7 @@
   function existingCategories(){
     var set = {};
     var order = [];
-    equipCatalog.forEach(function(it){
-      var c = (it.c || CAT_FALLBACK).trim();
-      if(!set[c]){ set[c] = true; order.push(c); }
-    });
-    userCatalog.forEach(function(it){
+    effectiveCatalogItems().forEach(function(it){
       var c = (it.category || CAT_FALLBACK).trim();
       if(!set[c]){ set[c] = true; order.push(c); }
     });
@@ -588,18 +625,24 @@
       return;
     }
     if(catEditId){
-      var item = userCatalog.filter(function(x){ return x.id === catEditId; })[0];
-      if(item){
-        item.name = name;
-        item.power = power;
-        item.category = category;
-        showToast('Equipamento atualizado no catálogo');
+      if(catEditId.indexOf('static-') === 0){
+        catalogOverrides[catEditId] = {name: name, power: power, category: category};
+        saveCatalogOverrides();
+      } else {
+        var item = userCatalog.filter(function(x){ return x.id === catEditId; })[0];
+        if(item){
+          item.name = name;
+          item.power = power;
+          item.category = category;
+        }
+        saveUserCatalog();
       }
+      showToast('Equipamento atualizado no catálogo');
     } else {
       userCatalog.push({id: 'uc-' + Date.now() + '-' + Math.floor(Math.random() * 1000), name: name, power: power, category: category});
+      saveUserCatalog();
       showToast('Adicionado ao catálogo: ' + name);
     }
-    saveUserCatalog();
     rebuildCatalogIndex();
     renderCatalogDatalist();
     renderCategoryDatalist();
@@ -621,11 +664,11 @@
   }
 
   function editCatItem(id){
-    var item = userCatalog.filter(function(x){ return x.id === id; })[0];
+    var item = effectiveCatalogItems().filter(function(x){ return x.id === id; })[0];
     if(!item) return;
     catEditId = id;
     els.catName.value = item.name;
-    els.catPower.value = item.power;
+    els.catPower.value = item.power || '';
     els.catCategory.value = item.category;
     els.catSaveBtn.textContent = 'Atualizar';
     els.catCancelEditBtn.hidden = false;
@@ -633,8 +676,15 @@
   }
 
   function deleteCatItem(id){
-    userCatalog = userCatalog.filter(function(x){ return x.id !== id; });
-    saveUserCatalog();
+    if(id.indexOf('static-') === 0){
+      catalogDeleted[id] = true;
+      delete catalogOverrides[id];
+      saveCatalogDeleted();
+      saveCatalogOverrides();
+    } else {
+      userCatalog = userCatalog.filter(function(x){ return x.id !== id; });
+      saveUserCatalog();
+    }
     rebuildCatalogIndex();
     renderCatalogDatalist();
     renderCategoryDatalist();
@@ -655,23 +705,13 @@
     if(!els.catList) return;
     var term = catSearchTerm.trim().toLowerCase();
 
-    // agrupa por categoria — itens estáticos (referência) e do usuário juntos
     var groups = {};
     var order = [];
-    function pushItem(category, entry){
-      var c = (category || CAT_FALLBACK).trim();
-      if(!groups[c]){ groups[c] = []; order.push(c); }
-      groups[c].push(entry);
-    }
-    equipCatalog.forEach(function(it){
-      if(term && it.l.toLowerCase().indexOf(term) === -1) return;
-      // extrai o nome sem o prefixo "[Categoria] "
-      var name = it.l.replace(/^\[[^\]]*\]\s*/, '');
-      pushItem(it.c, {name: name, power: it.w, readonly: true, id: null});
-    });
-    userCatalog.forEach(function(it){
+    effectiveCatalogItems().forEach(function(it){
       if(term && it.name.toLowerCase().indexOf(term) === -1) return;
-      pushItem(it.category, {name: it.name, power: it.power, readonly: false, id: it.id});
+      var c = (it.category || CAT_FALLBACK).trim();
+      if(!groups[c]){ groups[c] = []; order.push(c); }
+      groups[c].push(it);
     });
 
     if(!order.length){
@@ -688,9 +728,9 @@
         var useBtn = isFinite(it.power) && it.power
           ? '<button type="button" class="cat-use-btn" data-use-name="' + escapeHtml(it.name) + '" data-use-power="' + it.power + '" title="Adicionar ao rack">+ Rack</button>'
           : '';
-        var editBtn = it.id ? '<button type="button" class="cat-edit-btn" data-edit-id="' + it.id + '" title="Editar">✎</button>' : '';
-        var delBtn = it.id ? '<button type="button" class="cat-del-btn" data-del-id="' + it.id + '" title="Excluir">×</button>' : '';
-        return '<div class="cat-item' + (it.readonly ? ' cat-item-readonly' : '') + '">' +
+        var editBtn = '<button type="button" class="cat-edit-btn" data-edit-id="' + it.id + '" title="Editar">✎</button>';
+        var delBtn = '<button type="button" class="cat-del-btn" data-del-id="' + it.id + '" title="Excluir">×</button>';
+        return '<div class="cat-item">' +
           '<span class="cat-item-name">' + escapeHtml(it.name) + '</span>' +
           '<span class="cat-item-power">' + powerText + '</span>' +
           '<span class="cat-item-actions">' + useBtn + editBtn + delBtn + '</span>' +
@@ -724,6 +764,97 @@
   }
 
   // ---------- select de modelos ----------
+  // ---------- preço dos nobreaks (editável, tanto do catálogo padrão quanto personalizados) ----------
+  function loadNobreakPrices(){
+    try{
+      var raw = localStorage.getItem(LS_NOBREAK_PRICES);
+      var obj = raw ? JSON.parse(raw) : {};
+      return (obj && typeof obj === 'object') ? obj : {};
+    }catch(e){ return {}; }
+  }
+  function saveNobreakPrices(){
+    try{ localStorage.setItem(LS_NOBREAK_PRICES, JSON.stringify(nobreakPrices)); }catch(e){}
+  }
+  var nobreakPrices = loadNobreakPrices();
+
+  function formatPriceBRL(v){
+    if(!isFinite(v) || v <= 0) return null;
+    try{
+      return v.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+    }catch(e){
+      return 'R$ ' + fmt(v, 2);
+    }
+  }
+
+  function renderPriceWidget(container, modelId){
+    if(!container) return;
+    if(!modelId){
+      container.hidden = true;
+      container.innerHTML = '';
+      return;
+    }
+    container.hidden = false;
+    var price = nobreakPrices[modelId];
+    var priceText = formatPriceBRL(price);
+    if(container.dataset.editingId === modelId){
+      container.innerHTML =
+        '<div class="price-edit-row">' +
+          '<label class="field-label" for="price-input-' + modelId + '">Preço (R$)</label>' +
+          '<input type="number" min="0" step="0.01" class="price-input" id="price-input-' + modelId + '" value="' + (price || '') + '" placeholder="0,00">' +
+          '<button type="button" class="btn-tiny price-save-btn" data-price-id="' + modelId + '">Salvar</button>' +
+          '<button type="button" class="btn-tiny price-cancel-btn">Cancelar</button>' +
+        '</div>';
+      var inp = container.querySelector('.price-input');
+      if(inp) inp.focus();
+    } else {
+      container.innerHTML =
+        '<div class="price-display-row">' +
+          '<span class="price-label">Preço:</span>' +
+          '<span class="price-value">' + (priceText || 'não informado') + '</span>' +
+          '<button type="button" class="btn-tiny price-edit-btn" data-price-id="' + modelId + '">✎ ' + (priceText ? 'Editar' : 'Adicionar') + ' preço</button>' +
+        '</div>';
+    }
+  }
+
+  function wirePriceContainer(container, getCurrentModelId){
+    if(!container) return;
+    container.addEventListener('click', function(ev){
+      var editBtn = ev.target.closest ? ev.target.closest('.price-edit-btn') : null;
+      if(editBtn){
+        container.dataset.editingId = editBtn.getAttribute('data-price-id');
+        renderPriceWidget(container, getCurrentModelId());
+        return;
+      }
+      var cancelBtn = ev.target.closest ? ev.target.closest('.price-cancel-btn') : null;
+      if(cancelBtn){
+        delete container.dataset.editingId;
+        renderPriceWidget(container, getCurrentModelId());
+        return;
+      }
+      var saveBtn = ev.target.closest ? ev.target.closest('.price-save-btn') : null;
+      if(saveBtn){
+        var id = saveBtn.getAttribute('data-price-id');
+        var inp = container.querySelector('.price-input');
+        var val = inp ? parseFloat(inp.value.replace(',', '.')) : NaN;
+        if(isFinite(val) && val > 0){ nobreakPrices[id] = val; } else { delete nobreakPrices[id]; }
+        saveNobreakPrices();
+        delete container.dataset.editingId;
+        renderPriceWidget(container, getCurrentModelId());
+        showToast('Preço atualizado');
+        return;
+      }
+    });
+    container.addEventListener('keydown', function(ev){
+      if(ev.key === 'Enter'){
+        var saveBtn = container.querySelector('.price-save-btn');
+        if(saveBtn) saveBtn.click();
+      }
+    });
+  }
+
+  wirePriceContainer(els.aModelPrice, function(){ return els.model ? els.model.value : ''; });
+  wirePriceContainer(els.bManualPrice, function(){ return els.bManualModel ? els.bManualModel.value : ''; });
+
   function renderModelSelect(){
     var current = els.model.value;
     els.model.innerHTML = '';
@@ -757,8 +888,10 @@
   }
 
   function applyModel(id){
+    if(els.aModelPrice) delete els.aModelPrice.dataset.editingId;
     if(!id){
       els.modelInfo.hidden = true;
+      renderPriceWidget(els.aModelPrice, '');
       return;
     }
     var m = fullCatalog().filter(function(x){ return x.id === id; })[0];
@@ -777,6 +910,7 @@
     }
     els.modelInfo.innerHTML = info;
     els.modelInfo.hidden = false;
+    renderPriceWidget(els.aModelPrice, id);
     recalc();
   }
 
@@ -810,6 +944,13 @@
     };
     customCatalog.push(novo);
     saveCustomModels();
+
+    var priceInput = els.cPrice ? parseFloat(els.cPrice.value) : NaN;
+    if(isFinite(priceInput) && priceInput > 0){
+      nobreakPrices[novo.id] = priceInput;
+      saveNobreakPrices();
+    }
+
     renderModelSelect();
     renderManualModelSelect();
     els.model.value = novo.id;
@@ -818,6 +959,7 @@
     els.cName.value = '';
     els.cVa.value = '';
     els.cNbat.value = '';
+    if(els.cPrice) els.cPrice.value = '';
     els.customForm.hidden = true;
     showToast('Nobreak "' + name + '" salvo — ' + fmt(specs.w) + ' W, ' + specs.nbat + '× bateria');
   });
@@ -872,6 +1014,13 @@
       };
       customCatalog.push(novo);
       saveCustomModels();
+
+      var priceInput = els.bcPrice ? parseFloat(els.bcPrice.value) : NaN;
+      if(isFinite(priceInput) && priceInput > 0){
+        nobreakPrices[novo.id] = priceInput;
+        saveNobreakPrices();
+      }
+
       renderModelSelect();
       renderManualModelSelect();
       els.bManualModel.value = novo.id;
@@ -880,6 +1029,7 @@
       els.bcName.value = '';
       els.bcVa.value = '';
       els.bcNbat.value = '';
+      if(els.bcPrice) els.bcPrice.value = '';
       els.bcForm.hidden = true;
       showToast('Nobreak "' + name + '" salvo — ' + fmt(specs.w) + ' W, ' + specs.nbat + '× bateria');
     });
@@ -1234,6 +1384,11 @@
     var clientName = els.bClientName ? els.bClientName.value.trim() : '';
     var qtyText = result.bins.length === 1 ? '1 unidade' : result.bins.length + ' unidades';
     var overallMinutes = (result.energyWh / (totalLoad || 1)) * 60;
+    var priceVal = nobreakPrices[m.id];
+    var priceHtml = priceVal
+      ? '<div class="rp-spec"><div class="rp-spec-label">Preço unitário</div><div class="rp-spec-value">' + formatPriceBRL(priceVal) + '</div></div>' +
+        (result.bins.length > 1 ? '<div class="rp-spec"><div class="rp-spec-label">Custo total estimado</div><div class="rp-spec-value">' + formatPriceBRL(priceVal * result.bins.length) + '</div></div>' : '')
+      : '';
 
     var equipRows = equipamentos.map(function(e){
       var total = e.poe ? 0 : e.power * e.qty;
@@ -1313,6 +1468,7 @@
             '<div class="rp-spec"><div class="rp-spec-label">Potência</div><div class="rp-spec-value">' + fmt(m.va) + ' VA / ' + fmt(m.w) + ' W</div></div>' +
             '<div class="rp-spec"><div class="rp-spec-label">Bateria</div><div class="rp-spec-value">' + m.nbat + '× ' + m.vdc + 'V ' + m.ah + 'Ah</div></div>' +
             '<div class="rp-spec"><div class="rp-spec-label">Autonomia estimada</div><div class="rp-spec-value">~' + fmt(overallMinutes, 0) + ' min</div></div>' +
+            priceHtml +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -1361,6 +1517,10 @@
     }
 
     var modelBadges = (m.linha ? (isIntelbras(m) ? '<span class="badge badge-intelbras">✓ Intelbras</span>' : '') : '<span class="badge badge-qty">Configuração manual</span>');
+    var priceVal = m.id ? nobreakPrices[m.id] : null;
+    var priceHtml = priceVal
+      ? '<div class="rp-spec"><div class="rp-spec-label">Preço</div><div class="rp-spec-value">' + formatPriceBRL(priceVal) + '</div></div>'
+      : '';
 
     return reportHead('Relatório de nobreak' + (clientName ? ' — ' + escapeHtml(clientName) : '')) +
 
@@ -1394,6 +1554,7 @@
             '<div class="rp-spec"><div class="rp-spec-label">Potência</div><div class="rp-spec-value">' + fmt(m.va) + ' VA / ' + fmt(m.w) + ' W</div></div>' +
             '<div class="rp-spec"><div class="rp-spec-label">Bateria</div><div class="rp-spec-value">' + m.nbat + '× ' + m.vdc + 'V ' + m.ah + 'Ah</div></div>' +
             '<div class="rp-spec"><div class="rp-spec-label">Energia disponível</div><div class="rp-spec-value">' + fmt(energyWh, 1) + ' Wh</div></div>' +
+            priceHtml +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -1547,11 +1708,15 @@
 
   function updateManualDistribution(){
     if(!els.bManualModel || !els.bManualResult) return;
+    var id = els.bManualModel.value;
+    if(els.bManualPrice && els.bManualPrice.dataset.editingId !== id){
+      delete els.bManualPrice.dataset.editingId;
+    }
+    renderPriceWidget(els.bManualPrice, id);
     if(!lastDistParams){
       els.bManualResult.innerHTML = '';
       return;
     }
-    var id = els.bManualModel.value;
     var m = fullCatalog().filter(function(x){ return x.id === id; })[0];
     if(!m){ els.bManualResult.innerHTML = ''; return; }
 

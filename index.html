@@ -133,6 +133,7 @@
             <select id="a-model"></select>
           </div>
           <div class="model-info" id="a-model-info" hidden></div>
+          <div class="model-price-row" id="a-model-price" hidden></div>
 
           <div class="field-grid">
             <div class="field">
@@ -177,6 +178,10 @@
               <div class="field">
                 <label class="field-label" for="c-nbat">Nº de baterias</label>
                 <input id="c-nbat" type="number" min="1" step="1" placeholder="Ex: 2" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="c-price">Preço (R$, opcional)</label>
+                <input id="c-price" type="number" min="0" step="0.01" placeholder="Ex: 899.90" />
               </div>
             </div>
             <p class="hint">A potência real (W), tensão e capacidade (Ah) da bateria são estimadas automaticamente a partir do VA informado. Se deixar o nº de baterias em branco, também estimamos um valor típico.</p>
@@ -274,6 +279,7 @@
           <div class="dist-block">
             <label class="field-label" for="b-manual-model">Ou escolha um nobreak específico para ver quantas unidades seriam necessárias</label>
             <select id="b-manual-model"></select>
+            <div class="model-price-row" id="b-manual-price" hidden></div>
             <div id="b-manual-result"></div>
 
             <button class="btn-ghost" id="btn-bc-toggle" type="button">+ Cadastrar nobreak de outra linha</button>
@@ -292,6 +298,10 @@
                 <div class="field">
                   <label class="field-label" for="bc-nbat">Nº de baterias</label>
                   <input id="bc-nbat" type="number" min="1" step="1" placeholder="Ex: 2" />
+                </div>
+                <div class="field">
+                  <label class="field-label" for="bc-price">Preço (R$, opcional)</label>
+                  <input id="bc-price" type="number" min="0" step="0.01" placeholder="Ex: 899.90" />
                 </div>
               </div>
               <p class="hint">A potência real (W) e a capacidade da bateria são estimadas a partir do VA. Se deixar o nº de baterias em branco, também estimamos um valor típico.</p>
