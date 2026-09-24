@@ -41,6 +41,7 @@
     <button type="button" class="qn-link" data-target="equip">Equipamentos</button>
     <button type="button" class="qn-link" data-target="config">Configuração</button>
     <button type="button" class="qn-link" data-target="result">Resultado</button>
+    <button type="button" class="qn-link" id="catalog-btn">📦 Catálogo</button>
     <button type="button" class="qn-tour" id="tour-btn">🧭 Tour guiado</button>
   </nav>
 
@@ -324,6 +325,41 @@
 </div>
 
 <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+<div class="cat-modal-backdrop" id="cat-modal-backdrop" hidden></div>
+<div class="cat-modal" id="cat-modal" hidden role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
+  <div class="cat-modal-head">
+    <h2 id="cat-modal-title"><span class="dot"></span>Catálogo de equipamentos</h2>
+    <button type="button" class="cat-modal-close" id="cat-modal-close" aria-label="Fechar catálogo">×</button>
+  </div>
+  <p class="hint" style="margin-top:0;">Cadastre aqui os equipamentos que você usa com frequência, organizados por categoria. Use "+ Adicionar ao rack" para jogar direto na lista de equipamentos do rack.</p>
+
+  <div class="cat-form">
+    <div>
+      <label class="field-label" for="cat-name">Nome do equipamento</label>
+      <input id="cat-name" type="text" placeholder="Ex: Switch 24 portas PoE" />
+    </div>
+    <div>
+      <label class="field-label" for="cat-power">Potência (W)</label>
+      <input id="cat-power" type="number" min="0" step="1" placeholder="0" />
+    </div>
+    <div>
+      <label class="field-label" for="cat-category">Categoria</label>
+      <input id="cat-category" type="text" placeholder="Ex: Rede" list="cat-category-dl" autocomplete="off" />
+      <datalist id="cat-category-dl"></datalist>
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:6px;">
+      <button class="btn-add" id="cat-save-btn" type="button">Salvar</button>
+      <button class="btn-cancel-edit" id="cat-cancel-edit-btn" type="button" hidden>Cancelar</button>
+    </div>
+  </div>
+
+  <div class="eq-search-row">
+    <input id="cat-search" type="search" placeholder="Buscar no catálogo..." aria-label="Buscar equipamento no catálogo" />
+  </div>
+
+  <div id="cat-list" class="cat-list"></div>
+</div>
 
 <div class="tour-blocker" id="tour-blocker" hidden></div>
 <div class="tour-tooltip" id="tour-tooltip" hidden role="dialog" aria-modal="true" aria-labelledby="tour-title">

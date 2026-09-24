@@ -933,3 +933,112 @@
     .quicknav{gap:5px;}
     .qn-link, .qn-tour{padding:6px 9px;font-size:.72rem;}
   }
+
+  /* ---------- catálogo de equipamentos (modal) ---------- */
+  .cat-modal-backdrop{
+    position:fixed;
+    inset:0;
+    background:rgba(10,12,16,.55);
+    z-index:400;
+  }
+  .cat-modal{
+    position:fixed;
+    z-index:401;
+    top:5vh;
+    left:50%;
+    transform:translateX(-50%);
+    width:min(760px, calc(100vw - 32px));
+    max-height:90vh;
+    overflow-y:auto;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:22px 24px 26px;
+    box-shadow:0 20px 60px rgba(0,0,0,.35);
+  }
+  .cat-modal-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:6px;
+  }
+  .cat-modal-head h2{margin:0;}
+  .cat-modal-close{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text-dim);
+    width:32px;height:32px;
+    border-radius:9px;
+    font-size:1.2rem;
+    line-height:1;
+    cursor:pointer;
+  }
+  .cat-modal-close:hover{color:var(--text);border-color:var(--accent);}
+  .cat-form{
+    display:grid;
+    grid-template-columns:1.6fr .8fr 1fr auto;
+    gap:8px;
+    margin:14px 0 16px;
+  }
+  @media (max-width:640px){
+    .cat-form{grid-template-columns:1fr 1fr;}
+    .cat-form button{grid-column:1/-1;}
+  }
+  .cat-list{display:flex;flex-direction:column;gap:18px;}
+  .cat-group-title{
+    font-family:'Rajdhani',sans-serif;
+    font-size:1rem;
+    font-weight:700;
+    letter-spacing:.3px;
+    color:var(--accent);
+    margin:0 0 8px;
+    padding-bottom:6px;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .cat-group-count{
+    font-size:.72rem;
+    font-weight:600;
+    color:var(--text-dim);
+    background:var(--surface-2);
+    border-radius:999px;
+    padding:2px 9px;
+  }
+  .cat-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:8px 4px;
+    border-bottom:1px solid var(--border);
+    font-size:.88rem;
+  }
+  .cat-item:last-child{border-bottom:none;}
+  .cat-item-name{flex:1;min-width:0;overflow-wrap:anywhere;}
+  .cat-item-power{
+    color:var(--text-dim);
+    font-variant-numeric:tabular-nums;
+    white-space:nowrap;
+    font-size:.82rem;
+  }
+  .cat-item-actions{display:flex;gap:6px;flex-shrink:0;}
+  .cat-item-actions button{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text-dim);
+    width:28px;height:28px;
+    border-radius:7px;
+    font-size:.85rem;
+    line-height:1;
+    cursor:pointer;
+  }
+  .cat-item-actions .cat-use-btn{width:auto;padding:0 10px;font-size:.74rem;font-weight:700;color:var(--accent);border-color:var(--accent-dim, var(--border));}
+  .cat-item-actions .cat-use-btn:hover{background:var(--accent-dim);}
+  .cat-item-actions .cat-edit-btn:hover{color:var(--accent);border-color:var(--accent);}
+  .cat-item-actions .cat-del-btn:hover{color:var(--danger);border-color:var(--danger);}
+  .cat-item.cat-item-readonly .cat-item-actions .cat-del-btn,
+  .cat-item.cat-item-readonly .cat-item-actions .cat-edit-btn{display:none;}
+  .cat-empty{color:var(--text-dim);font-size:.86rem;padding:10px 0;}

@@ -4,6 +4,7 @@
   var LS_TOUR_SEEN = 'nobreak_calc_tour_seen_v1';
   var LS_LEARNED_POWER = 'nobreak_calc_learned_power_v1';
   var LS_THEME = 'nobreak_calc_theme_v1';
+  var LS_USER_CATALOG = 'nobreak_calc_user_catalog_v1';
 
   // ---------- catálogo de nobreaks (dados em js/data-nobreaks.js) ----------
   var presetCatalog = (typeof NOBREAK_PRESET_CATALOG !== 'undefined' ? NOBREAK_PRESET_CATALOG.slice() : []);
@@ -30,6 +31,20 @@
     search: document.getElementById('eq-search'),
     loadExampleBtn: document.getElementById('btn-load-example'),
     clearAllBtn: document.getElementById('btn-clear-all'),
+
+    // catálogo de equipamentos (modal)
+    catalogBtn: document.getElementById('catalog-btn'),
+    catModalBackdrop: document.getElementById('cat-modal-backdrop'),
+    catModal: document.getElementById('cat-modal'),
+    catModalClose: document.getElementById('cat-modal-close'),
+    catName: document.getElementById('cat-name'),
+    catPower: document.getElementById('cat-power'),
+    catCategory: document.getElementById('cat-category'),
+    catCategoryDl: document.getElementById('cat-category-dl'),
+    catSaveBtn: document.getElementById('cat-save-btn'),
+    catCancelEditBtn: document.getElementById('cat-cancel-edit-btn'),
+    catSearch: document.getElementById('cat-search'),
+    catList: document.getElementById('cat-list'),
 
     modeABtn: document.getElementById('mode-a-btn'),
     modeBBtn: document.getElementById('mode-b-btn'),
@@ -415,9 +430,25 @@
   // ---------- catálogo de equipamentos (aba GERAL) ----------
   var equipCatalog = (typeof EQUIP_CATALOG !== 'undefined') ? EQUIP_CATALOG : [];
   var catalogByLabelLower = {};
-  equipCatalog.forEach(function(it){
-    catalogByLabelLower[it.l.trim().toLowerCase()] = it;
-  });
+
+  // ---------- catálogo cadastrado pelo usuário (com categorias, editável) ----------
+  function loadUserCatalog(){
+    try{
+      var raw = localStorage.getItem(LS_USER_CATALOG);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    }catch(e){ return []; }
+  }
+  function saveUserCatalog(){
+    try{ localStorage.setItem(LS_USER_CATALOG, JSON.stringify(userCatalog)); }catch(e){}
+  }
+  var userCatalog = loadUserCatalog();
+  var catEditId = null;
+  var catSearchTerm = '';
+
+  function userCatalogLabel(item){
+    return '[' + item.category + '] ' + item.name;
+  }
 
   // ---------- potências aprendidas (equipamentos digitados/corrigidos pelo usuário) ----------
   function loadLearnedPower(){
@@ -430,12 +461,29 @@
     try{ localStorage.setItem(LS_LEARNED_POWER, JSON.stringify(learnedPower)); }catch(e){}
   }
   var learnedPower = loadLearnedPower();
-  // Aplica potências aprendidas por cima do catálogo assim que a página carrega,
-  // assim uma correção feita antes já vale para a próxima vez que o item for usado.
-  Object.keys(learnedPower).forEach(function(key){
-    var hit = catalogByLabelLower[key];
-    if(hit) hit.w = learnedPower[key];
-  });
+
+  // Reconstrói o índice de busca (nome -> item) a partir do catálogo estático +
+  // catálogo do usuário, aplicando por cima as potências aprendidas/corrigidas.
+  function rebuildCatalogIndex(){
+    catalogByLabelLower = {};
+    equipCatalog.forEach(function(it){
+      catalogByLabelLower[it.l.trim().toLowerCase()] = it;
+    });
+    userCatalog.forEach(function(it){
+      var entry = {l: userCatalogLabel(it), w: it.power, c: it.category};
+      catalogByLabelLower[entry.l.trim().toLowerCase()] = entry;
+      // também indexa só pelo nome, para quem digitar sem o prefixo de categoria
+      var nameKey = it.name.trim().toLowerCase();
+      if(!catalogByLabelLower[nameKey]) catalogByLabelLower[nameKey] = entry;
+    });
+    // Aplica potências aprendidas por cima do catálogo, assim uma correção feita
+    // antes já vale para a próxima vez que o item for usado.
+    Object.keys(learnedPower).forEach(function(key){
+      var hit = catalogByLabelLower[key];
+      if(hit) hit.w = learnedPower[key];
+    });
+  }
+  rebuildCatalogIndex();
 
   function learnPower(name, power){
     var key = name.trim().toLowerCase();
@@ -456,9 +504,14 @@
       opt.value = it.l;
       frag.appendChild(opt);
     });
+    userCatalog.forEach(function(it){
+      var opt = document.createElement('option');
+      opt.value = userCatalogLabel(it);
+      frag.appendChild(opt);
+    });
     els.catalogDl.innerHTML = '';
     els.catalogDl.appendChild(frag);
-    if(els.catalogCount) els.catalogCount.textContent = equipCatalog.length;
+    if(els.catalogCount) els.catalogCount.textContent = equipCatalog.length + userCatalog.length;
   }
 
   els.name.addEventListener('input', function(){
@@ -470,6 +523,205 @@
       els.power.value = learnedPower[key];
     }
   });
+
+  // ---------- modal: gestão do catálogo de equipamentos por categoria ----------
+  var CAT_FALLBACK = 'Outros';
+
+  function existingCategories(){
+    var set = {};
+    var order = [];
+    equipCatalog.forEach(function(it){
+      var c = (it.c || CAT_FALLBACK).trim();
+      if(!set[c]){ set[c] = true; order.push(c); }
+    });
+    userCatalog.forEach(function(it){
+      var c = (it.category || CAT_FALLBACK).trim();
+      if(!set[c]){ set[c] = true; order.push(c); }
+    });
+    order.sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
+    return order;
+  }
+
+  function renderCategoryDatalist(){
+    if(!els.catCategoryDl) return;
+    els.catCategoryDl.innerHTML = existingCategories().map(function(c){
+      return '<option value="' + escapeHtml(c) + '"></option>';
+    }).join('');
+  }
+
+  function cancelCatEdit(){
+    catEditId = null;
+    els.catName.value = '';
+    els.catPower.value = '';
+    els.catCategory.value = '';
+    els.catSaveBtn.textContent = 'Salvar';
+    els.catCancelEditBtn.hidden = true;
+  }
+
+  function openCatalogModal(){
+    renderCategoryDatalist();
+    renderCatalogList();
+    els.catModalBackdrop.hidden = false;
+    els.catModal.hidden = false;
+    els.catName.focus();
+  }
+  function closeCatalogModal(){
+    els.catModalBackdrop.hidden = true;
+    els.catModal.hidden = true;
+    cancelCatEdit();
+  }
+
+  if(els.catalogBtn){ els.catalogBtn.addEventListener('click', openCatalogModal); }
+  if(els.catModalClose){ els.catModalClose.addEventListener('click', closeCatalogModal); }
+  if(els.catModalBackdrop){ els.catModalBackdrop.addEventListener('click', closeCatalogModal); }
+  document.addEventListener('keydown', function(ev){
+    if(ev.key === 'Escape' && els.catModal && !els.catModal.hidden) closeCatalogModal();
+  });
+
+  function saveCatItem(){
+    var name = els.catName.value.trim();
+    var power = parseFloat(els.catPower.value);
+    var category = els.catCategory.value.trim() || CAT_FALLBACK;
+    if(!name || !isFinite(power) || power <= 0){
+      els.catName.focus();
+      showToast('Informe nome e potência (W) válidos.');
+      return;
+    }
+    if(catEditId){
+      var item = userCatalog.filter(function(x){ return x.id === catEditId; })[0];
+      if(item){
+        item.name = name;
+        item.power = power;
+        item.category = category;
+        showToast('Equipamento atualizado no catálogo');
+      }
+    } else {
+      userCatalog.push({id: 'uc-' + Date.now() + '-' + Math.floor(Math.random() * 1000), name: name, power: power, category: category});
+      showToast('Adicionado ao catálogo: ' + name);
+    }
+    saveUserCatalog();
+    rebuildCatalogIndex();
+    renderCatalogDatalist();
+    renderCategoryDatalist();
+    renderCatalogList();
+    cancelCatEdit();
+  }
+
+  if(els.catSaveBtn){ els.catSaveBtn.addEventListener('click', saveCatItem); }
+  if(els.catCancelEditBtn){ els.catCancelEditBtn.addEventListener('click', cancelCatEdit); }
+  [els.catName, els.catPower, els.catCategory].forEach(function(inp){
+    if(!inp) return;
+    inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter') saveCatItem(); });
+  });
+  if(els.catSearch){
+    els.catSearch.addEventListener('input', function(){
+      catSearchTerm = els.catSearch.value;
+      renderCatalogList();
+    });
+  }
+
+  function editCatItem(id){
+    var item = userCatalog.filter(function(x){ return x.id === id; })[0];
+    if(!item) return;
+    catEditId = id;
+    els.catName.value = item.name;
+    els.catPower.value = item.power;
+    els.catCategory.value = item.category;
+    els.catSaveBtn.textContent = 'Atualizar';
+    els.catCancelEditBtn.hidden = false;
+    els.catName.focus();
+  }
+
+  function deleteCatItem(id){
+    userCatalog = userCatalog.filter(function(x){ return x.id !== id; });
+    saveUserCatalog();
+    rebuildCatalogIndex();
+    renderCatalogDatalist();
+    renderCategoryDatalist();
+    renderCatalogList();
+    showToast('Removido do catálogo');
+  }
+
+  function useCatItem(name, power){
+    equipamentos.push({name: name, power: power, qty: 1});
+    saveEquipamentos();
+    els.eqNote.hidden = true;
+    renderTable();
+    recalc();
+    showToast('Adicionado ao rack: ' + name);
+  }
+
+  function renderCatalogList(){
+    if(!els.catList) return;
+    var term = catSearchTerm.trim().toLowerCase();
+
+    // agrupa por categoria — itens estáticos (referência) e do usuário juntos
+    var groups = {};
+    var order = [];
+    function pushItem(category, entry){
+      var c = (category || CAT_FALLBACK).trim();
+      if(!groups[c]){ groups[c] = []; order.push(c); }
+      groups[c].push(entry);
+    }
+    equipCatalog.forEach(function(it){
+      if(term && it.l.toLowerCase().indexOf(term) === -1) return;
+      // extrai o nome sem o prefixo "[Categoria] "
+      var name = it.l.replace(/^\[[^\]]*\]\s*/, '');
+      pushItem(it.c, {name: name, power: it.w, readonly: true, id: null});
+    });
+    userCatalog.forEach(function(it){
+      if(term && it.name.toLowerCase().indexOf(term) === -1) return;
+      pushItem(it.category, {name: it.name, power: it.power, readonly: false, id: it.id});
+    });
+
+    if(!order.length){
+      els.catList.innerHTML = '<p class="cat-empty">Nenhum equipamento encontrado.</p>';
+      return;
+    }
+
+    order.sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
+
+    els.catList.innerHTML = order.map(function(cat){
+      var items = groups[cat].slice().sort(function(a, b){ return a.name.localeCompare(b.name, 'pt-BR'); });
+      var rows = items.map(function(it){
+        var powerText = isFinite(it.power) && it.power ? fmt(it.power) + ' W' : '— W';
+        var useBtn = isFinite(it.power) && it.power
+          ? '<button type="button" class="cat-use-btn" data-use-name="' + escapeHtml(it.name) + '" data-use-power="' + it.power + '" title="Adicionar ao rack">+ Rack</button>'
+          : '';
+        var editBtn = it.id ? '<button type="button" class="cat-edit-btn" data-edit-id="' + it.id + '" title="Editar">✎</button>' : '';
+        var delBtn = it.id ? '<button type="button" class="cat-del-btn" data-del-id="' + it.id + '" title="Excluir">×</button>' : '';
+        return '<div class="cat-item' + (it.readonly ? ' cat-item-readonly' : '') + '">' +
+          '<span class="cat-item-name">' + escapeHtml(it.name) + '</span>' +
+          '<span class="cat-item-power">' + powerText + '</span>' +
+          '<span class="cat-item-actions">' + useBtn + editBtn + delBtn + '</span>' +
+          '</div>';
+      }).join('');
+      return '<div class="cat-group">' +
+        '<div class="cat-group-title"><span>' + escapeHtml(cat) + '</span><span class="cat-group-count">' + items.length + '</span></div>' +
+        rows +
+        '</div>';
+    }).join('');
+  }
+
+  if(els.catList){
+    els.catList.addEventListener('click', function(ev){
+      var useBtn = ev.target.closest ? ev.target.closest('.cat-use-btn') : null;
+      if(useBtn){
+        useCatItem(useBtn.getAttribute('data-use-name'), parseFloat(useBtn.getAttribute('data-use-power')));
+        return;
+      }
+      var editBtn = ev.target.closest ? ev.target.closest('.cat-edit-btn') : null;
+      if(editBtn){
+        editCatItem(editBtn.getAttribute('data-edit-id'));
+        return;
+      }
+      var delBtn = ev.target.closest ? ev.target.closest('.cat-del-btn') : null;
+      if(delBtn){
+        deleteCatItem(delBtn.getAttribute('data-del-id'));
+        return;
+      }
+    });
+  }
 
   // ---------- select de modelos ----------
   function renderModelSelect(){
