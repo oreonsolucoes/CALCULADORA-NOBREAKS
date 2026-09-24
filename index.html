@@ -190,6 +190,12 @@
 
         <div class="card" id="a-result-card">
           <h2><span class="dot"></span>Autonomia estimada</h2>
+
+          <div class="field" style="margin-bottom:16px;">
+            <label class="field-label" for="a-client-name">Nome do cliente / projeto (opcional, aparece no relatório)</label>
+            <input id="a-client-name" type="text" placeholder="Ex: Loja Centro, Cliente Fulano de Tal..." />
+          </div>
+
           <div class="result-hero">
             <div class="eyebrow">Tempo estimado de backup</div>
             <div class="big-num" id="a-big">— <small>min</small></div>
@@ -208,6 +214,9 @@
             <div class="mini-stat"><div class="l">Potência útil do nobreak</div><div class="v" id="a-stat-cap">0 W</div></div>
             <div class="mini-stat"><div class="l">Energia disponível</div><div class="v" id="a-stat-energy">0 Wh</div></div>
             <div class="mini-stat"><div class="l">Autonomia</div><div class="v" id="a-stat-time">0h 0min</div></div>
+          </div>
+          <div class="dist-option-actions">
+            <button type="button" class="btn-report" id="a-report-btn">📄 Gerar relatório</button>
           </div>
         </div>
       </div>

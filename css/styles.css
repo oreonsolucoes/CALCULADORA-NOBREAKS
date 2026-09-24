@@ -154,6 +154,7 @@
     overflow:hidden;
   }
   .load-chart-fill{
+    display:block;
     height:100%;
     border-radius:99px;
     background:linear-gradient(90deg, var(--accent), #4c8dff);
@@ -340,6 +341,23 @@
   .eq-table td.center{text-align:center;}
   .eq-table tr.is-poe td{color:var(--text-dim);}
   .eq-table tr.is-poe td.num-col{text-decoration:line-through;text-decoration-color:var(--border);}
+
+  .eq-inline-input{
+    width:64px;
+    max-width:100%;
+    background:transparent;
+    border:1px solid transparent;
+    border-radius:6px;
+    padding:5px 6px;
+    font-size:.9rem;
+    font-variant-numeric:tabular-nums;
+    text-align:right;
+    color:var(--text);
+    transition:background .12s, border-color .12s;
+  }
+  .eq-inline-input:hover{background:var(--surface-2);border-color:var(--border);}
+  .eq-inline-input:focus{background:var(--surface-2);border-color:var(--accent);outline:none;}
+  td.center .eq-inline-input{text-align:center;width:52px;}
   .poe-badge{
     display:inline-block;
     font-size:.62rem;

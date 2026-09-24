@@ -55,6 +55,8 @@
     aStatCap: document.getElementById('a-stat-cap'),
     aStatEnergy: document.getElementById('a-stat-energy'),
     aStatTime: document.getElementById('a-stat-time'),
+    aClientName: document.getElementById('a-client-name'),
+    aReportBtn: document.getElementById('a-report-btn'),
 
     // custom form
     customToggle: document.getElementById('btn-custom-toggle'),
@@ -222,11 +224,11 @@
           : fmt(totalW);
         tr.innerHTML =
           '<td>' + nameCell + '</td>' +
-          '<td class="num-col">' + fmt(e.power) + '</td>' +
-          '<td class="center">' + e.qty + '</td>' +
-          '<td class="num-col">' + totalCell + '</td>' +
+          '<td class="num-col"><input type="number" class="eq-inline-input eq-power-input" data-idx="' + idx + '" min="0" step="1" value="' + e.power + '" aria-label="Potência unitária de ' + escapeHtml(e.name) + ' em watts"></td>' +
+          '<td class="center"><input type="number" class="eq-inline-input eq-qty-input" data-idx="' + idx + '" min="1" step="1" value="' + e.qty + '" aria-label="Quantidade de ' + escapeHtml(e.name) + '"></td>' +
+          '<td class="num-col"><span class="eq-total-cell" data-idx="' + idx + '">' + totalCell + '</span></td>' +
           '<td class="center row-actions">' +
-            '<button class="edit-btn" data-idx="' + idx + '" aria-label="Editar ' + escapeHtml(e.name) + '">✎</button>' +
+            '<button class="edit-btn" data-idx="' + idx + '" aria-label="Editar nome de ' + escapeHtml(e.name) + '">✎</button>' +
             '<button class="rm-btn" data-idx="' + idx + '" aria-label="Remover ' + escapeHtml(e.name) + '">×</button>' +
           '</td>';
         els.eqBody.appendChild(tr);
@@ -251,6 +253,61 @@
       btn.addEventListener('click', function(){
         var i = parseInt(btn.getAttribute('data-idx'), 10);
         startEdit(i);
+      });
+    });
+
+    // ---------- edição inline de potência (W) e quantidade ----------
+    function updateInlineTotal(i){
+      var item = equipamentos[i];
+      if(!item) return;
+      var totalW = item.power * item.qty;
+      var cell = els.eqBody.querySelector('.eq-total-cell[data-idx="' + i + '"]');
+      if(cell){
+        cell.innerHTML = item.poe
+          ? '<span title="Não soma no total — alimentado pelo switch">' + fmt(totalW) + '</span>'
+          : fmt(totalW);
+      }
+      els.totalLoad.textContent = fmt(totalLoadW()) + ' W';
+    }
+
+    Array.prototype.forEach.call(els.eqBody.querySelectorAll('.eq-power-input'), function(inp){
+      inp.addEventListener('input', function(){
+        var i = parseInt(inp.getAttribute('data-idx'), 10);
+        var val = parseFloat(inp.value);
+        if(!isFinite(val) || val < 0) return;
+        equipamentos[i].power = val;
+        updateInlineTotal(i);
+        recalc();
+      });
+      inp.addEventListener('change', function(){
+        var i = parseInt(inp.getAttribute('data-idx'), 10);
+        var val = parseFloat(inp.value);
+        if(!isFinite(val) || val < 0){ inp.value = equipamentos[i].power; return; }
+        equipamentos[i].power = val;
+        learnPower(equipamentos[i].name, val);
+        saveEquipamentos();
+        updateInlineTotal(i);
+        recalc();
+      });
+    });
+
+    Array.prototype.forEach.call(els.eqBody.querySelectorAll('.eq-qty-input'), function(inp){
+      inp.addEventListener('input', function(){
+        var i = parseInt(inp.getAttribute('data-idx'), 10);
+        var val = parseInt(inp.value, 10);
+        if(!isFinite(val) || val < 1) return;
+        equipamentos[i].qty = val;
+        updateInlineTotal(i);
+        recalc();
+      });
+      inp.addEventListener('change', function(){
+        var i = parseInt(inp.getAttribute('data-idx'), 10);
+        var val = parseInt(inp.value, 10);
+        if(!isFinite(val) || val < 1){ inp.value = equipamentos[i].qty; return; }
+        equipamentos[i].qty = val;
+        saveEquipamentos();
+        updateInlineTotal(i);
+        recalc();
       });
     });
   }
@@ -598,6 +655,8 @@
   });
 
   // ---------- cálculo modo A ----------
+  var lastModeAState = null;
+
   function recalcModeA(load){
     var va = parseFloat(els.aVa.value) || 0;
     var pf = parseFloat(els.aPf.value) || 0;
@@ -651,6 +710,41 @@
       els.aPillText.textContent = 'Dentro do limite';
       els.aLoadFill.style.background = 'var(--good)';
     }
+
+    lastModeAState = {
+      load: load,
+      usefulCapacityW: usefulCapacityW,
+      energyWh: energyWh,
+      autonomyMin: autonomyMin,
+      loadPct: loadPct
+    };
+  }
+
+  function modeAReportModel(){
+    var id = els.model ? els.model.value : '';
+    var m = id ? fullCatalog().filter(function(x){ return x.id === id; })[0] : null;
+    if(m) return m;
+    return {
+      modelo: 'Configuração manual',
+      linha: null,
+      source: null,
+      va: parseFloat(els.aVa.value) || 0,
+      w: (parseFloat(els.aVa.value) || 0) * (parseFloat(els.aPf.value) || 0),
+      vdc: parseFloat(els.aVdc.value) || 0,
+      ah: parseFloat(els.aAh.value) || 0,
+      nbat: parseFloat(els.aNbat.value) || 0
+    };
+  }
+
+  if(els.aReportBtn){
+    els.aReportBtn.addEventListener('click', function(){
+      if(!lastModeAState || lastModeAState.load <= 0){
+        showToast('Adicione ao menos um equipamento antes de gerar o relatório.');
+        return;
+      }
+      var m = modeAReportModel();
+      openReport(buildReportHTMLModeA(m, lastModeAState.load, lastModeAState.usefulCapacityW, lastModeAState.energyWh, lastModeAState.autonomyMin, lastModeAState.loadPct));
+    });
   }
 
   // ---------- cálculo modo B ----------
@@ -792,59 +886,10 @@
     return 'ok';
   }
 
-  function buildReportHTML(m, result, desiredMin, totalLoad){
-    var now = new Date();
-    var dateStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-    var clientName = els.bClientName ? els.bClientName.value.trim() : '';
-    var qtyText = result.bins.length === 1 ? '1 unidade' : result.bins.length + ' unidades';
-    var overallMinutes = (result.energyWh / (totalLoad || 1)) * 60;
-
-    var equipRows = equipamentos.map(function(e){
-      var total = e.poe ? 0 : e.power * e.qty;
-      return '<tr' + (e.poe ? ' class="rp-muted-row"' : '') + '>' +
-        '<td>' + escapeHtml(e.name) + (e.poe ? ' <span class="rp-tag-inline">PoE — não soma</span>' : '') + '</td>' +
-        '<td class="num">' + fmt(e.power) + ' W</td>' +
-        '<td class="num center">' + e.qty + '</td>' +
-        '<td class="num strong">' + fmt(total) + ' W</td>' +
-        '</tr>';
-    }).join('');
-
-    var binsHtml = result.bins.map(function(bin, i){
-      var minutes = (result.energyWh / bin.load) * 60;
-      var pctRaw = Math.round((bin.load / result.capacity) * 100);
-      var pct = Math.min(pctRaw, 999);
-      var barPct = Math.min(pctRaw, 100);
-      var cls = loadClassName(pctRaw);
-      var groups = groupBinItems(bin.items);
-      var itemsList = groups.map(function(g){
-        return '<li><span>' + (g.qty > 1 ? '<b>' + g.qty + '×</b> ' : '') + escapeHtml(g.name) + '</span>' +
-          '<span class="rp-item-power">' + fmt(g.power) + ' W cada</span></li>';
-      }).join('');
-      return '<div class="rp-bin">' +
-        '<div class="rp-bin-head">' +
-          '<div class="rp-bin-badge">' + (i + 1) + '</div>' +
-          '<div class="rp-bin-headtext">' +
-            '<div class="rp-bin-title">Nobreak ' + (i + 1) + ' de ' + result.bins.length + '</div>' +
-            '<div class="rp-bin-sub">' + pct + '% de carga · ~' + fmt(minutes, 0) + ' min de autonomia</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="rp-meter"><div class="rp-meter-fill ' + cls + '" style="width:' + barPct + '%;"></div></div>' +
-        '<ul class="rp-bin-list">' + itemsList + '</ul>' +
-        '</div>';
-    }).join('');
-
-    var oversizedHtml = '';
-    if(result.oversized.length){
-      var overGroups = groupBinItems(result.oversized);
-      oversizedHtml = '<div class="rp-warning"><span class="rp-warning-icon">⚠️</span><div>' +
-        '<strong>Atenção:</strong> os itens a seguir são grandes demais para caber sozinhos em uma unidade deste modelo — ' +
-        overGroups.map(function(g){ return (g.qty > 1 ? '<b>' + g.qty + '×</b> ' : '') + escapeHtml(g.name); }).join(', ') +
-        '.</div></div>';
-    }
-
+  function reportHead(title){
     return '<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8">' +
       '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<title>Relatório de nobreak' + (clientName ? ' — ' + escapeHtml(clientName) : '') + '</title>' +
+      '<title>' + title + '</title>' +
       '<link rel="preconnect" href="https://fonts.googleapis.com">' +
       '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
       '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">' +
@@ -915,10 +960,73 @@
       '.rp-warning{display:flex;gap:12px;align-items:flex-start;background:var(--warn-bg);color:#7a5206;padding:14px 16px;border-radius:10px;font-size:.86rem;margin-top:16px;}' +
       '.rp-warning-icon{font-size:1.1rem;}' +
       '.rp-footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:.76rem;line-height:1.5;}' +
+      '.rp-big-meter{height:22px;border-radius:99px;background:var(--line);overflow:hidden;margin:16px 0 6px;}' +
+      '.rp-big-meter-fill{height:100%;border-radius:99px;display:flex;align-items:center;justify-content:flex-end;padding-right:10px;color:#fff;font-size:.72rem;font-weight:800;font-family:"Manrope",sans-serif;transition:width .3s ease;}' +
+      '.rp-big-meter-fill.ok{background:linear-gradient(90deg,#1f9d55,#2bbf6c);}' +
+      '.rp-big-meter-fill.warn{background:linear-gradient(90deg,#b3790a,#d99a1f);}' +
+      '.rp-big-meter-fill.danger{background:linear-gradient(90deg,#c23a3a,#e35555);}' +
+      '.rp-status-line{display:flex;justify-content:space-between;align-items:center;font-size:.82rem;color:var(--muted);}' +
+      '.rp-status-pill{display:inline-block;font-size:.74rem;font-weight:800;padding:4px 12px;border-radius:999px;}' +
+      '.rp-status-pill.ok{background:var(--ok-bg);color:var(--ok);}' +
+      '.rp-status-pill.warn{background:var(--warn-bg);color:var(--warn);}' +
+      '.rp-status-pill.danger{background:var(--danger-bg);color:var(--danger);}' +
       '@media (max-width:640px){.rp-stat-row{grid-template-columns:1fr;}.rp-nobreak-card{flex-direction:column;align-items:flex-start;}}' +
       '@media print{.rp-print-bar{display:none;}body{background:#fff;}.rp-hero{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.rp-bin{page-break-inside:avoid;}}' +
       '</style></head><body>' +
-      '<div class="rp-print-bar"><button onclick="window.print()">🖨️ Imprimir / salvar como PDF</button></div>' +
+      '<div class="rp-print-bar"><button onclick="window.print()">🖨️ Imprimir / salvar como PDF</button></div>';
+  }
+
+  function buildReportHTML(m, result, desiredMin, totalLoad){
+    var now = new Date();
+    var dateStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    var clientName = els.bClientName ? els.bClientName.value.trim() : '';
+    var qtyText = result.bins.length === 1 ? '1 unidade' : result.bins.length + ' unidades';
+    var overallMinutes = (result.energyWh / (totalLoad || 1)) * 60;
+
+    var equipRows = equipamentos.map(function(e){
+      var total = e.poe ? 0 : e.power * e.qty;
+      return '<tr' + (e.poe ? ' class="rp-muted-row"' : '') + '>' +
+        '<td>' + escapeHtml(e.name) + (e.poe ? ' <span class="rp-tag-inline">PoE — não soma</span>' : '') + '</td>' +
+        '<td class="num">' + fmt(e.power) + ' W</td>' +
+        '<td class="num center">' + e.qty + '</td>' +
+        '<td class="num strong">' + fmt(total) + ' W</td>' +
+        '</tr>';
+    }).join('');
+
+    var binsHtml = result.bins.map(function(bin, i){
+      var minutes = (result.energyWh / bin.load) * 60;
+      var pctRaw = Math.round((bin.load / result.capacity) * 100);
+      var pct = Math.min(pctRaw, 999);
+      var barPct = Math.min(pctRaw, 100);
+      var cls = loadClassName(pctRaw);
+      var groups = groupBinItems(bin.items);
+      var itemsList = groups.map(function(g){
+        return '<li><span>' + (g.qty > 1 ? '<b>' + g.qty + '×</b> ' : '') + escapeHtml(g.name) + '</span>' +
+          '<span class="rp-item-power">' + fmt(g.power) + ' W cada</span></li>';
+      }).join('');
+      return '<div class="rp-bin">' +
+        '<div class="rp-bin-head">' +
+          '<div class="rp-bin-badge">' + (i + 1) + '</div>' +
+          '<div class="rp-bin-headtext">' +
+            '<div class="rp-bin-title">Nobreak ' + (i + 1) + ' de ' + result.bins.length + '</div>' +
+            '<div class="rp-bin-sub">' + pct + '% de carga · ~' + fmt(minutes, 0) + ' min de autonomia</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="rp-meter"><div class="rp-meter-fill ' + cls + '" style="width:' + barPct + '%;"></div></div>' +
+        '<ul class="rp-bin-list">' + itemsList + '</ul>' +
+        '</div>';
+    }).join('');
+
+    var oversizedHtml = '';
+    if(result.oversized.length){
+      var overGroups = groupBinItems(result.oversized);
+      oversizedHtml = '<div class="rp-warning"><span class="rp-warning-icon">⚠️</span><div>' +
+        '<strong>Atenção:</strong> os itens a seguir são grandes demais para caber sozinhos em uma unidade deste modelo — ' +
+        overGroups.map(function(g){ return (g.qty > 1 ? '<b>' + g.qty + '×</b> ' : '') + escapeHtml(g.name); }).join(', ') +
+        '.</div></div>';
+    }
+
+    return reportHead('Relatório de nobreak' + (clientName ? ' — ' + escapeHtml(clientName) : '')) +
 
       '<div class="rp-hero"><div class="rp-hero-inner">' +
         '<p class="rp-eyebrow">Proposta técnica · Nobreak</p>' +
@@ -962,6 +1070,89 @@
       binsHtml +
       oversizedHtml +
       '</div>' +
+
+      '<div class="rp-footer">Relatório gerado automaticamente pela Calculadora de Autonomia de Nobreak. Fotos meramente ilustrativas, cortesia do site oficial da Intelbras — cores e acabamento podem variar.</div>' +
+      '</div>' +
+      '</body></html>';
+  }
+
+  function buildReportHTMLModeA(m, totalLoad, usefulCapacityW, energyWh, autonomyMin, loadPct){
+    var now = new Date();
+    var dateStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    var clientName = els.aClientName ? els.aClientName.value.trim() : '';
+
+    var equipRows = equipamentos.map(function(e){
+      var total = e.poe ? 0 : e.power * e.qty;
+      return '<tr' + (e.poe ? ' class="rp-muted-row"' : '') + '>' +
+        '<td>' + escapeHtml(e.name) + (e.poe ? ' <span class="rp-tag-inline">PoE — não soma</span>' : '') + '</td>' +
+        '<td class="num">' + fmt(e.power) + ' W</td>' +
+        '<td class="num center">' + e.qty + '</td>' +
+        '<td class="num strong">' + fmt(total) + ' W</td>' +
+        '</tr>';
+    }).join('');
+
+    var hours = Math.floor(autonomyMin / 60);
+    var mins = Math.round(autonomyMin % 60);
+    var autonomyText = totalLoad > 0
+      ? (autonomyMin >= 60 ? (hours + 'h ' + mins + 'min') : (fmt(autonomyMin, 1) + ' min'))
+      : '—';
+
+    var pctRaw = Math.round(Math.min(loadPct, 999));
+    var barPct = Math.min(Math.max(pctRaw, 0), 100);
+    var cls = usefulCapacityW > 0 ? loadClassName(pctRaw) : 'warn';
+    var statusText = usefulCapacityW <= 0 ? 'Configure o nobreak' : (pctRaw >= 100 ? 'Sobrecarga' : (pctRaw >= 80 ? 'Próximo do limite' : 'Dentro do limite'));
+
+    var warningHtml = '';
+    if(usefulCapacityW > 0 && pctRaw >= 100){
+      warningHtml = '<div class="rp-warning"><span class="rp-warning-icon">⚠️</span><div>' +
+        '<strong>Atenção:</strong> a carga total do rack ultrapassa a potência útil deste nobreak. Considere reduzir a carga, redistribuir equipamentos ou usar um modelo de maior capacidade.</div></div>';
+    }
+
+    var modelBadges = (m.linha ? (isIntelbras(m) ? '<span class="badge badge-intelbras">✓ Intelbras</span>' : '') : '<span class="badge badge-qty">Configuração manual</span>');
+
+    return reportHead('Relatório de nobreak' + (clientName ? ' — ' + escapeHtml(clientName) : '')) +
+
+      '<div class="rp-hero"><div class="rp-hero-inner">' +
+        '<p class="rp-eyebrow">Proposta técnica · Nobreak</p>' +
+        '<h1>Autonomia estimada' + (clientName ? ' — ' + escapeHtml(clientName) : '') + '</h1>' +
+        '<div class="rp-hero-meta">Gerado em <strong>' + dateStr + '</strong></div>' +
+        '<div class="rp-stat-row">' +
+          '<div class="rp-stat"><div class="rp-stat-label">Carga total</div><div class="rp-stat-value">' + fmt(totalLoad) + ' W</div></div>' +
+          '<div class="rp-stat"><div class="rp-stat-label">Potência útil do nobreak</div><div class="rp-stat-value">' + fmt(usefulCapacityW) + ' W</div></div>' +
+          '<div class="rp-stat"><div class="rp-stat-label">Autonomia estimada</div><div class="rp-stat-value">' + autonomyText + '</div></div>' +
+        '</div>' +
+      '</div></div>' +
+
+      '<div class="rp-wrap">' +
+
+      '<div class="rp-section"><h2>Equipamentos do rack</h2><div class="rp-card">' +
+      '<table><thead><tr><th>Equipamento</th><th style="text-align:right;">Potência</th><th style="text-align:center;">Qtd.</th><th style="text-align:right;">Total</th></tr></thead>' +
+      '<tbody>' + equipRows + '</tbody></table>' +
+      '<div class="rp-total-bar"><span class="rp-total-label">Carga total do rack</span><span class="rp-total-value">' + fmt(totalLoad) + ' W</span></div>' +
+      '</div></div>' +
+
+      '<div class="rp-section"><h2>Nobreak utilizado</h2><div class="rp-card">' +
+      '<div class="rp-nobreak-card">' +
+        '<div class="rp-nobreak-photo">' + nobreakIcon(m) + '</div>' +
+        '<div class="rp-nobreak-info">' +
+          '<h3>' + escapeHtml(m.modelo) + '</h3>' +
+          '<div>' + modelBadges + '</div>' +
+          '<div class="rp-spec-grid">' +
+            '<div class="rp-spec"><div class="rp-spec-label">Linha</div><div class="rp-spec-value">' + escapeHtml(m.linha || '—') + '</div></div>' +
+            '<div class="rp-spec"><div class="rp-spec-label">Potência</div><div class="rp-spec-value">' + fmt(m.va) + ' VA / ' + fmt(m.w) + ' W</div></div>' +
+            '<div class="rp-spec"><div class="rp-spec-label">Bateria</div><div class="rp-spec-value">' + m.nbat + '× ' + m.vdc + 'V ' + m.ah + 'Ah</div></div>' +
+            '<div class="rp-spec"><div class="rp-spec-label">Energia disponível</div><div class="rp-spec-value">' + fmt(energyWh, 1) + ' Wh</div></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '</div></div>' +
+
+      '<div class="rp-section"><h2>Nível de carga</h2><div class="rp-card">' +
+      '<div class="rp-status-line"><span>' + fmt(totalLoad) + ' W de ' + fmt(usefulCapacityW) + ' W úteis</span>' +
+      '<span class="rp-status-pill ' + cls + '">' + statusText + '</span></div>' +
+      '<div class="rp-big-meter"><div class="rp-big-meter-fill ' + cls + '" style="width:' + barPct + '%;">' + (barPct >= 12 ? pctRaw + '%' : '') + '</div></div>' +
+      warningHtml +
+      '</div></div>' +
 
       '<div class="rp-footer">Relatório gerado automaticamente pela Calculadora de Autonomia de Nobreak. Fotos meramente ilustrativas, cortesia do site oficial da Intelbras — cores e acabamento podem variar.</div>' +
       '</div>' +
